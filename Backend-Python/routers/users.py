@@ -1,21 +1,29 @@
 import secrets
 import string
+from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, AfterValidator
 
 from security import hash_password, verify_password, create_access_token, get_current_user
 from repositories import user_repo
 from models.user import User
 
+def validate_bcrypt_length(v: str) -> str:
+    if len(v.encode("utf-8")) > 72:
+        raise ValueError("Password must not exceed 72 bytes")
+    return v
+
+BcryptPassword = Annotated[str, AfterValidator(validate_bcrypt_length)]
+
 class UserSignupRequest(BaseModel):
     name: str
     email: str
-    password: str
+    password: BcryptPassword
     referral_code: str | None = None
 
 class LoginRequest(BaseModel):
     email: str
-    password: str
+    password: BcryptPassword
 
 class AuthResponse(BaseModel):
     userId: str
