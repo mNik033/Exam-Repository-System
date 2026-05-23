@@ -14,6 +14,7 @@ class Notification(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 class User(BaseModel):
+    id: str | None = Field(default=None, alias="_id")
     name: str
     email: str
     password_hash: str
