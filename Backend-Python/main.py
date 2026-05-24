@@ -1,8 +1,10 @@
+import os
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import os
 
 from config import settings
 from database import client
@@ -11,11 +13,18 @@ from routers.users import router as users_router
 from routers.courses import router as courses_router
 from routers.papers import router as papers_router
 
+from tasks.paper_processing import process_uploaded_paper_task
+
+logger = logging.getLogger(__name__)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # verify DB is reachable
     await client.admin.command('ping')
     print("Connnected to DB")
+
+    # scan for and process pending files
+    await scan_and_process_pending_papers()
 
     yield
 
@@ -46,3 +55,16 @@ app.include_router(papers_router)
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy"}
+
+async def scan_and_process_pending_papers():
+    pending_prefix = "pending_"
+    pending_files = [f for f in os.listdir('uploads') if f.startswith(pending_prefix)]
+
+    for file in pending_files:
+        file_path = os.path.join('uploads', file)
+        try:
+            user_id = file.split('_')[1]
+            asyncio.create_task(process_uploaded_paper_task(file_path, user_id))
+        except Exception as e:
+            logger.error(f"Failed to process {file_path}: {str(e)}")
+
