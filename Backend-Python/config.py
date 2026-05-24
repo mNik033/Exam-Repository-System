@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     DB_NAME: str
     JWT_SECRET: str
     PORT: int = 8001
+    COURSES_JSON_PATH: str
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -8,6 +8,7 @@ from config import settings
 from database import client
 
 from routers.users import router as users_router
+from routers.courses import router as courses_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -38,6 +39,7 @@ os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.include_router(users_router)
+app.include_router(courses_router)
 
 @app.get("/api/health")
 async def health_check():
