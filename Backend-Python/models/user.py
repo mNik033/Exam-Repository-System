@@ -9,7 +9,6 @@ class Notification(BaseModel):
     message: str
     type: str
     is_read: bool = False
-    course_id: str | None = None
     paper_id: str | None = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 

@@ -37,8 +37,10 @@ async def update_credits(user_id: str, amount: int) -> None:
         {"$inc": {"credit": amount}}
     )
 
-async def add_notification(user_id: str, message: str, type: str) -> None:
-    notification = Notification(message=message, type=type)
+async def add_notification(
+    user_id: str, message: str, type: str, paper_id: str | None = None
+) -> None:
+    notification = Notification(message=message, type=type, paper_id=paper_id)
     await users.update_one(
         {"_id": ObjectId(user_id)},
         {"$push": {"notifications": notification.model_dump()}}
