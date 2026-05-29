@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import numpy as np
 
 from google import genai
 from google.genai import types
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
 GEMINI_MODEL = "gemini-3.1-flash-lite"
+EMBEDDINGS_MODEL = "gemini-embedding-001"
 
 
 # ── Prompt Templates ──────────────────────────────────────────────────
@@ -174,6 +176,36 @@ async def extract_paper_data(
         len(response.parsed.questions),
     )
     return response.parsed
+
+
+# ── Embedding & Semantic Search ──────────────────────────────────────
+
+async def generate_embeddings(texts: list[str]) -> list[list[float]]:
+    if not texts:
+        return []
+    try:
+        logger.info("Generating vector embeddings for %d texts...", len(texts))
+        response = await client.aio.models.embed_content(
+            model=EMBEDDINGS_MODEL,
+            contents=texts,
+            config=types.EmbedContentConfig(output_dimensionality=768),
+        )
+        if not response.embeddings:
+            logger.warning("No embeddings returned via API")
+            return []
+        return [emb.values for emb in response.embeddings]
+    except Exception as e:
+        logger.error("Failed to generate embeddings: %s", e)
+        return []
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    a_arr = np.array(a)
+    b_arr = np.array(b)
+    norm_a = np.linalg.norm(a_arr)
+    norm_b = np.linalg.norm(b_arr)
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return float(np.dot(a_arr, b_arr) / (norm_a * norm_b))
 
 
 # ── Answer Generation ─────────────────────────────────────────────────
