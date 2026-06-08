@@ -20,14 +20,15 @@ async def get_paper_by_id(paper_id: str) -> Paper | None:
     doc["_id"] = str(doc["_id"])
     return Paper(**doc)
 
-async def exists_paper(course_id: str, session: str, session_year: str, exam_type: str) -> bool:
-    count = await papers.count_documents({
+async def exists_paper(course_id: str, session: str, session_year: str, exam_type: str) -> str | None:
+    paper = await papers.find_one({
         "course_id": course_id,
         "session": session,
         "session_year": session_year,
         "exam_type": exam_type
-    })
-    return count > 0
+    }, projection={"_id": 1})
+
+    return str(paper["_id"]) if paper else None
 
 async def list_by_course(course_id: str) -> list[Paper]:
     cursor = papers.find({"course_id": course_id}).sort("session_year", -1)
