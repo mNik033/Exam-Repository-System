@@ -1,35 +1,11 @@
 import secrets
 import string
-from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, AfterValidator
 
 from security import hash_password, verify_password, create_access_token, get_current_user
 from repositories import user_repo
 from models.user import User
-
-def validate_bcrypt_length(v: str) -> str:
-    if len(v.encode("utf-8")) > 72:
-        raise ValueError("Password must not exceed 72 bytes")
-    return v
-
-BcryptPassword = Annotated[str, AfterValidator(validate_bcrypt_length)]
-
-class UserSignupRequest(BaseModel):
-    name: str
-    email: str
-    password: BcryptPassword
-    referral_code: str | None = None
-
-class LoginRequest(BaseModel):
-    email: str
-    password: BcryptPassword
-
-class AuthResponse(BaseModel):
-    userId: str
-    token: str
-    credit: int
-    ref_code: str
+from schemas.user import UserSignupRequest, AuthResponse, LoginRequest
 
 router = APIRouter(prefix="/api", tags=["Users"])
 
@@ -43,7 +19,27 @@ async def signup(payload: UserSignupRequest):
     if existing_user:
         raise HTTPException(status_code=409, detail="User with this email already exists")
 
-    new_user = User(name=payload.name, email=payload.email, password_hash=hash_password(payload.password), credit=100, ref_code=generate_referral_code(),)
+    starting_credit = 100
+    if payload.referral_code:
+        referrer = await user_repo.get_user_by_referral_code(payload.referral_code)
+        if not referrer:
+            raise HTTPException(status_code=400, detail="Invalid referral code")
+        starting_credit = 300
+        await user_repo.update_credits(referrer.id, 200)
+        await user_repo.add_notification(
+            user_id=referrer.id,
+            message="Someone signed up using your referral code! You have been credited 200 credits.",
+            type="referral"
+        )
+
+    new_user = User(
+        name=payload.name, 
+        email=payload.email, 
+        password_hash=hash_password(payload.password), 
+        credit=starting_credit, 
+        ref_code=generate_referral_code(),
+        enrolled_courses=payload.enrolled_courses
+    )
 
     user_id = await user_repo.create_user(new_user)
     token = create_access_token(user_id)

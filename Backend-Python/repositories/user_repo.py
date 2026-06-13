@@ -22,6 +22,13 @@ async def get_user_by_id(user_id: str) -> User | None:
     user_dict["_id"] = str(user_dict["_id"])
     return User(**user_dict)
 
+async def get_user_by_referral_code(ref_code: str) -> User | None:
+    user_dict = await users.find_one({"ref_code": ref_code})
+    if not user_dict:
+        return None
+    user_dict["_id"] = str(user_dict["_id"])
+    return User(**user_dict)
+
 async def create_user(user: User) -> str:
     # convert the Pydantic model to a dictionary suitable for MongoDB
     user_dict = user.model_dump(exclude={"id"})
