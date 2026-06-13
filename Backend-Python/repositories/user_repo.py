@@ -50,14 +50,25 @@ async def add_notification(
     notification = Notification(message=message, type=type, paper_id=paper_id)
     await users.update_one(
         {"_id": ObjectId(user_id)},
-        {"$push": {"notifications": notification.model_dump()}}
+        {
+            "$push": {
+                "notifications": {
+                    "$each": [notification.model_dump()],
+                    "$position": 0,
+                    "$slice": 100
+                }
+            }
+        }
     )
 
 async def get_notifications(user_id: str) -> list[Notification]:
-    user = await get_user_by_id(user_id)
-    if not user:
+    doc = await users.find_one(
+        {"_id": ObjectId(user_id)},
+        {"notifications": 1}
+    )
+    if not doc or "notifications" not in doc:
         return []
-    return user.notifications
+    return [Notification(**n) for n in doc["notifications"]]
 
 async def mark_notifications_read(user_id: str) -> None:
     await users.update_one(
