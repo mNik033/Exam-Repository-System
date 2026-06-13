@@ -3,9 +3,9 @@ import string
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from security import hash_password, verify_password, create_access_token, get_current_user
-from repositories import user_repo
+from repositories import user_repo, paper_repo
 from models.user import User, Notification
-from schemas.user import UserSignupRequest, AuthResponse, LoginRequest
+from schemas.user import UserSignupRequest, AuthResponse, LoginRequest, ProfileResponse
 
 router = APIRouter(prefix="/api", tags=["Users"])
 
@@ -57,11 +57,16 @@ async def login(payload: LoginRequest):
     token = create_access_token(user.id)
     return AuthResponse(userId=user.id, token=token, credit=user.credit, ref_code=user.ref_code)
 
-@router.get("/profile")
+@router.get("/profile", response_model=ProfileResponse)
 async def get_profile(current_user: User = Depends(get_current_user)):
     # FastAPI will automatically reject requests without a valid
     # JWT token because of Depends(get_current_user)
-    return current_user
+    return ProfileResponse(
+        name=current_user.name, 
+        email=current_user.email, 
+        credit=current_user.credit, 
+        ref_code=current_user.ref_code
+    )
 
 @router.get("/notifications", response_model=list[Notification])
 async def get_notifications(current_user: User = Depends(get_current_user)):

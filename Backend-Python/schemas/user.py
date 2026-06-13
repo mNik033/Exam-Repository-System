@@ -25,6 +25,12 @@ class AuthResponse(BaseModel):
     credit: int
     ref_code: str
 
+class ProfileResponse(BaseModel):
+    name: str
+    email: str
+    credit: int
+    ref_code: str
+
 class GetUnlockedAnswersRequest(BaseModel):
     paper_id: str
 
