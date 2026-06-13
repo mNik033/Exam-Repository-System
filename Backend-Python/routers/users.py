@@ -41,7 +41,7 @@ def generate_referral_code(length: int = 8) -> str:
 async def signup(payload: UserSignupRequest):
     existing_user = await user_repo.get_user_by_email(payload.email)
     if existing_user:
-        raise HTTPException(status_code=400, detail="User with this email already exists")
+        raise HTTPException(status_code=409, detail="User with this email already exists")
 
     new_user = User(name=payload.name, email=payload.email, password_hash=hash_password(payload.password), credit=100, ref_code=generate_referral_code(),)
 
