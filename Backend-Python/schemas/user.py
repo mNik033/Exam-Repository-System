@@ -29,7 +29,6 @@ class GetUnlockedAnswersRequest(BaseModel):
     paper_id: str
 
 class UnlockAnswerRequest(BaseModel):
-    paper_id: str
     question_id: str
 
 class UnlockAnswerResponse(BaseModel):

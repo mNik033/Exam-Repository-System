@@ -1,10 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 
-class UnlockedAnswer(BaseModel):
-    paper_id: str
-    question_ids: list[str] = []
-
 class Notification(BaseModel):
     message: str
     type: str
@@ -22,4 +18,4 @@ class User(BaseModel):
     enrolled_courses: list[str] = []
     browsed_courses: list[str] = []
     notifications: list[Notification] = []
-    unlocked_answers: list[UnlockedAnswer] = []
+    unlocked_answers: list[str] = []

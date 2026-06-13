@@ -68,3 +68,33 @@ async def get_notifications(current_user: User = Depends(get_current_user)):
     notifications = await user_repo.get_notifications(current_user.id)
     await user_repo.mark_notifications_read(current_user.id)
     return notifications
+
+@router.post("/unlockAnswer", response_model=UnlockAnswerResponse)
+async def unlock_answer(
+    question_id: str, 
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.credit < 5:
+        raise HTTPException(status_code=402, detail="Insufficient credits")
+
+    success = await user_repo.unlock_answer(current_user.id, question_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to unlock answer")
+
+    return UnlockAnswerResponse(
+        message="Answer unlocked successfully", 
+        credit=current_user.credit - 5
+    )
+
+@router.get("/getUnlockedAnswers")
+async def get_unlocked_answers(
+    paper_id: str, 
+    current_user: User = Depends(get_current_user)
+):
+    question_ids = await paper_repo.get_question_ids(paper_id)
+    if question_ids is None:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    
+    unlocked_set = set(current_user.unlocked_answers)
+    unlocked_for_paper = [qid for qid in question_ids if qid in unlocked_set]
+    return {"unlocked_answers": unlocked_for_paper}

@@ -20,6 +20,15 @@ async def get_paper_by_id(paper_id: str) -> Paper | None:
     doc["_id"] = str(doc["_id"])
     return Paper(**doc)
 
+async def get_question_ids(paper_id: str) -> list[str] | None:
+    doc = await papers.find_one(
+        {"_id": ObjectId(paper_id)},
+        {"question_ids": 1}
+    )
+    if not doc:
+        return None
+    return doc.get("question_ids", [])
+
 async def exists_paper(course_id: str, session: str, session_year: str, exam_type: str) -> str | None:
     paper = await papers.find_one({
         "course_id": course_id,
