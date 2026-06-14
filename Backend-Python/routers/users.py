@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from security import hash_password, verify_password, create_access_token, get_current_user
 from repositories import user_repo, paper_repo
 from models.user import User, Notification
-from schemas.user import UserSignupRequest, AuthResponse, LoginRequest, ProfileResponse
+from schemas.user import UserSignupRequest, AuthResponse, LoginRequest, ProfileResponse, UnlockAnswerResponse
 
 router = APIRouter(prefix="/api", tags=["Users"])
 
@@ -48,11 +48,8 @@ async def signup(payload: UserSignupRequest):
 @router.post("/login", response_model=AuthResponse)
 async def login(payload: LoginRequest):
     user = await user_repo.get_user_by_email(payload.email)
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-
-    if not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid password")
+    if not user or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
     token = create_access_token(user.id)
     return AuthResponse(userId=user.id, token=token, credit=user.credit, ref_code=user.ref_code)
