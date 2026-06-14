@@ -12,6 +12,7 @@ from schemas.paper import (
     PaperDetailsResponse,
     QuestionPaperResponse,
     BrowsedCourseRequest,
+    QuestionIndexResponse,
 )
 
 from tasks.paper_processing import process_uploaded_paper_task
@@ -111,3 +112,9 @@ async def get_dashboard(current_user: User = Depends(get_current_user)):
         return await paper_repo.get_recent_papers(limit=5)
 
     return await paper_repo.list_by_courses(top_5)
+
+@router.get("/questions/index", response_model=list[QuestionIndexResponse])
+async def get_questions_index():
+    return await question_repo.get_questions(
+        projection={"question_text": 1, "course_id": 1, "tag": 1}
+    )

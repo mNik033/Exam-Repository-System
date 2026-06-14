@@ -12,6 +12,12 @@ class QuestionPaperResponse(BaseModel):
     course_id: str
     created_at: datetime
 
+class QuestionIndexResponse(BaseModel):
+    id: str = Field(default=None, alias="_id")
+    question_text: str
+    course_id: str
+    tag: str
+
 class PaperDetailsResponse(BaseModel):
     paper: Paper
     course: Course

@@ -12,6 +12,7 @@ from database import client
 from routers.users import router as users_router
 from routers.courses import router as courses_router
 from routers.papers import router as papers_router
+from repositories.question_repo import ensure_text_index
 
 from tasks.paper_processing import process_uploaded_paper_task
 
@@ -22,6 +23,9 @@ async def lifespan(app: FastAPI):
     # verify DB is reachable
     await client.admin.command('ping')
     print("Connnected to DB")
+
+    # ensure MongoDB text index on question_text
+    await ensure_text_index()
 
     # scan for and process pending files
     await scan_and_process_pending_papers()

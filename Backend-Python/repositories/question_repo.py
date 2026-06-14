@@ -3,6 +3,17 @@ from bson import ObjectId
 from database import questions
 from models.question import Question
 
+async def ensure_text_index() -> None:
+    await questions.create_index([("question_text", "text")])
+
+async def get_questions(projection: dict | None = None) -> list[dict]:
+    cursor = questions.find({}, projection)
+    results = []
+    async for doc in cursor:
+        doc["_id"] = str(doc["_id"])
+        results.append(doc)
+    return results
+
 async def get_question_by_id(question_id: str) -> Question | None:
     doc = await questions.find_one({"_id": ObjectId(question_id)})
     if not doc:
