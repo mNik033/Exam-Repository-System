@@ -91,3 +91,21 @@ async def unlock_answer(user_id: str, question_id: str) -> bool:
 
     return result.modified_count > 0
 
+async def add_browsed_course(user_id: str, course_id: str) -> None:
+    await users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$pull": {"browsed_courses": course_id}}
+    )
+
+    await users.update_one(
+        {"_id": ObjectId(user_id)},
+        {
+            "$push": {
+                "browsed_courses": {
+                    "$each": [course_id],
+                    "$position": 0,
+                    "$slice": 10
+                }
+            }
+        }
+    )

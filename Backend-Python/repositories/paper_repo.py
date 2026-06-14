@@ -47,8 +47,24 @@ async def list_by_course(course_id: str) -> list[Paper]:
         results.append(Paper(**doc))
     return results
 
+async def list_by_courses(course_ids: list[str]) -> list[Paper]:
+    cursor = papers.find({"course_id": {"$in": course_ids}}).sort("session_year", -1)
+    results = []
+    async for doc in cursor:
+        doc["_id"] = str(doc["_id"])
+        results.append(Paper(**doc))
+    return results
+
 async def list_by_user(user_id: str) -> list[Paper]:
     cursor = papers.find({"uploaded_by": user_id}).sort("session_year", -1)
+    results = []
+    async for doc in cursor:
+        doc["_id"] = str(doc["_id"])
+        results.append(Paper(**doc))
+    return results
+
+async def get_recent_papers(limit: int = 10) -> list[Paper]:
+    cursor = papers.find().sort("created_at", -1).limit(limit)
     results = []
     async for doc in cursor:
         doc["_id"] = str(doc["_id"])
