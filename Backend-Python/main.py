@@ -12,6 +12,7 @@ from database import client
 from routers.users import router as users_router
 from routers.courses import router as courses_router
 from routers.papers import router as papers_router
+from routers.payments import router as payments_router
 from repositories.question_repo import ensure_text_index
 
 from tasks.paper_processing import process_uploaded_paper_task
@@ -55,6 +56,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.include_router(users_router)
 app.include_router(courses_router)
 app.include_router(papers_router)
+app.include_router(payments_router)
 
 @app.get("/api/health")
 async def health_check():

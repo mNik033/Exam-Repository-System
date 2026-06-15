@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     PORT: int = 8001
     COURSES_JSON_PATH: str
     GEMINI_API_KEY: str
+    RAZORPAY_KEY: str
+    RAZORPAY_SECRET: str
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
