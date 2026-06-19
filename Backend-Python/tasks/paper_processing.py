@@ -280,7 +280,7 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
 
         # Step 10: move file and save paper
         perm_path = await _move_to_permanent_storage(file_path)
-        paper_title = f"[{extracted_data.sessionYear} / {extracted_data.session}] {extracted_data.examType} - [{course.code}] {course.name}"
+        paper_title = f"[{course.code}] {course.name} - {extracted_data.examType} ({extracted_data.session} {extracted_data.sessionYear})"
 
         paper_id = await paper_repo.create_paper(
             title=paper_title,
