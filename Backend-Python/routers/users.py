@@ -43,7 +43,14 @@ async def signup(payload: UserSignupRequest):
 
     user_id = await user_repo.create_user(new_user)
     token = create_access_token(user_id)
-    return AuthResponse(userId=user_id, token=token, credit=new_user.credit, ref_code=new_user.ref_code)
+    return AuthResponse(
+        userId=user_id, 
+        token=token, 
+        credit=new_user.credit, 
+        ref_code=new_user.ref_code,
+        name=new_user.name,
+        email=new_user.email
+    )
 
 @router.post("/login", response_model=AuthResponse)
 async def login(payload: LoginRequest):
@@ -52,7 +59,14 @@ async def login(payload: LoginRequest):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     token = create_access_token(user.id)
-    return AuthResponse(userId=user.id, token=token, credit=user.credit, ref_code=user.ref_code)
+    return AuthResponse(
+        userId=user.id, 
+        token=token, 
+        credit=user.credit, 
+        ref_code=user.ref_code,
+        name=user.name,
+        email=user.email
+    )
 
 @router.get("/profile", response_model=ProfileResponse)
 async def get_profile(current_user: User = Depends(get_current_user)):

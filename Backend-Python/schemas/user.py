@@ -24,6 +24,8 @@ class AuthResponse(BaseModel):
     token: str
     credit: int
     ref_code: str
+    name: str
+    email: str
 
 class ProfileResponse(BaseModel):
     name: str
