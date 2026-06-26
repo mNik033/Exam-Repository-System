@@ -1,6 +1,7 @@
 from bson import ObjectId
 import shutil
 import uuid
+import time
 from fastapi import APIRouter, File, UploadFile, Depends, BackgroundTasks, status, HTTPException
 
 from repositories import course_repo, paper_repo, question_repo, user_repo
@@ -30,7 +31,19 @@ async def upload_paper(
     current_user: User = Depends(get_current_user)
 ):
     file_extension = file.filename.split(".")[-1]
-    temp_filename = f"pending_{current_user.id}_{uuid.uuid4()}.{file_extension}"
+    
+    # sanitize the original filename to keep it safe for paths and splits
+    safe_filename = "".join(c for c in file.filename if c.isalnum() or c in "._-").strip()
+    if not safe_filename:
+        safe_filename = f"document.{file_extension}"
+    
+    # truncate to avoid file name too long error
+    base_name = safe_filename.rsplit(".", 1)[0]
+    if len(base_name) > 100:
+        safe_filename = f"{base_name[:100]}.{file_extension}"
+    
+    timestamp = int(time.time())
+    temp_filename = f"pending_{timestamp}_{current_user.id}_{uuid.uuid4()}_{safe_filename}"
     temp_path = f"uploads/{temp_filename}"
 
     with open(temp_path, "wb") as buffer:
