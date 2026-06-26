@@ -112,10 +112,10 @@ async def _deduplicate_questions(
 
     return question_ids, new_questions_to_generate
 
-async def _move_to_permanent_storage(file_path: str) -> str:
+async def _move_to_permanent_storage(file_path: str, target_name: str) -> str:
     # move temp upload to permanent storage and return new path
     file_extension = file_path.split(".")[-1]
-    perm_filename = f"{uuid.uuid4()}.{file_extension}"
+    perm_filename = f"{target_name}.{file_extension}"
     perm_path = os.path.join("uploads", perm_filename)
 
     os.makedirs(os.path.dirname(perm_path), exist_ok=True)
@@ -279,7 +279,8 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
                 question_ids[item["index"]] = inserted_ids[idx]
 
         # Step 10: move file and save paper
-        perm_path = await _move_to_permanent_storage(file_path)
+        target_name = f"{course.code}_{extracted_data.sessionYear}_{extracted_data.session}_{extracted_data.examType}".replace(" ", "_").replace("/", "-")
+        perm_path = await _move_to_permanent_storage(file_path, target_name)
         paper_title = f"[{course.code}] {course.name} - {extracted_data.examType} ({extracted_data.session} {extracted_data.sessionYear})"
 
         paper_id = await paper_repo.create_paper(
