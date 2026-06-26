@@ -33,12 +33,6 @@ class ProfileResponse(BaseModel):
     credit: int
     ref_code: str
 
-class GetUnlockedAnswersRequest(BaseModel):
-    paper_id: str
-
-class UnlockAnswerRequest(BaseModel):
-    question_id: str
-
 class UnlockAnswerResponse(BaseModel):
     message: str
     credit: int

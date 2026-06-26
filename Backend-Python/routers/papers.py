@@ -122,7 +122,7 @@ async def get_paper_details(paper_id: str, current_user: User = Depends(get_curr
 
         ordered_questions.append(
             QuestionPaperResponse(
-                id=q.id,
+                _id=q.id,
                 question_text=q.question_text,
                 answer_text=q.answer_text if qid in unlocked_set else None,
                 tag=q.tag,
