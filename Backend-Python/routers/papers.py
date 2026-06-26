@@ -1,7 +1,9 @@
-from bson import ObjectId
+import os
 import shutil
-import uuid
 import time
+import uuid
+from datetime import datetime
+from bson import ObjectId
 from fastapi import APIRouter, File, UploadFile, Depends, BackgroundTasks, status, HTTPException
 
 from repositories import course_repo, paper_repo, question_repo, user_repo
@@ -23,6 +25,47 @@ router = APIRouter(prefix="/api", tags=["Papers"])
 @router.get("/getPapers", response_model=list[Paper])
 async def get_papers():
     return await paper_repo.get_all_papers()
+
+@router.get("/myPapers", response_model=list[Paper])
+async def get_my_papers(current_user: User = Depends(get_current_user)):
+    # fetch processed papers from database
+    papers_list = await paper_repo.list_by_user(current_user.id)
+
+    # check for active pending files in uploads folder
+    uploads_dir = "uploads"
+    pending_papers = []
+    if os.path.exists(uploads_dir):
+        for filename in os.listdir(uploads_dir):
+            if filename.startswith("pending_"):
+                parts = filename.split("_", 4)
+                
+                # parts format: ["pending", timestamp, user_id, uuid, safe_filename]
+                if len(parts) > 2 and parts[2] == current_user.id:
+                    original_name = parts[4] if len(parts) > 4 else "Uploaded Document"
+                    filepath = os.path.join(uploads_dir, filename)
+                    
+                    try:
+                        created_at = datetime.fromtimestamp(int(parts[1]))
+                    except (ValueError, IndexError):
+                        created_at = datetime.utcnow()
+                
+                pending_papers.append(
+                    Paper(
+                        _id=f"pending_{filename}",
+                        title=f"[Processing] {original_name}",
+                        file_path=filepath,
+                        course_id="pending",
+                        uploaded_by=current_user.id,
+                        session="Pending",
+                        session_year="Pending",
+                        exam_type="Pending",
+                        question_ids=[],
+                        created_at=created_at
+                    )
+                )
+
+    pending_papers.sort(key=lambda x: x.created_at, reverse=True)
+    return pending_papers + papers_list
 
 @router.post("/uploadPaper", status_code=status.HTTP_202_ACCEPTED, response_model=UploadPaperResponse)
 async def upload_paper(
