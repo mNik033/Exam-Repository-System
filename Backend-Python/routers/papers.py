@@ -73,6 +73,20 @@ async def upload_paper(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user)
 ):
+    # magic number validation
+    header = await file.read(10)
+    await file.seek(0)
+    
+    is_pdf = header.startswith(b"%PDF-")
+    is_jpeg = header.startswith(b"\xff\xd8\xff")
+    is_png = header.startswith(b"\x89PNG\r\n\x1a\n")
+    
+    if not (is_pdf or is_jpeg or is_png):
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid file format. Only true PDF, JPEG, and PNG files are supported."
+        )
+
     file_extension = file.filename.split(".")[-1]
     
     # sanitize the original filename to keep it safe for paths and splits
