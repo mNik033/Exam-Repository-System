@@ -1,91 +1,104 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 
-let logoutTimer;
+const TOKEN_LIFETIME_MS = 1000 * 60 * 60 * 24;
 
-const useAuth = () => {
-  const [token, setToken] = useState(null);
-  const [tokenExpirationDate, setTokenExpirationDate] = useState(null);
-  const [userId, setUserId] = useState(null);
-  const [credit, setCredit] = useState(null);
-  const [refCode, setRefCode] = useState(null);
-
-  const login = useCallback((uid, token, currentCredit, refCode, expirationDate) => {
-    setToken(token);
-    setUserId(uid);
-    setCredit(currentCredit);
-    setRefCode(refCode);
-
-    const tokenExpiry =
-      expirationDate || new Date(new Date().getTime() + 1000 * 60 * 60);
-    setTokenExpirationDate(tokenExpiry);
-
-    // Save all user data (including refCode) to localStorage.
-    localStorage.setItem(
-      "userData",
-      JSON.stringify({
-        userId: uid,
-        token: token,
-        expiration: tokenExpiry.toISOString(),
-        credit: currentCredit,
-        refCode: refCode
-      })
-    );
-
-    console.log("User logged in:", { uid, token, currentCredit, refCode, tokenExpiry });
-  }, []);
-
-  const logout = useCallback(() => {
-    setToken(null);
-    setTokenExpirationDate(null);
-    setUserId(null);
-    setCredit(null);
-    setRefCode(null);
-    localStorage.removeItem("userData");
-
-    console.log("User logged out");
-  }, []);
-
-  const updateCredit = useCallback((newCredit) => {
-    setCredit(newCredit);
-    const storedData = JSON.parse(localStorage.getItem("userData"));
-    if (storedData) {
-      storedData.credit = newCredit;
-      localStorage.setItem("userData", JSON.stringify(storedData));
-      console.log("Updated Local Storage:", storedData);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (token && tokenExpirationDate) {
-      const remainingTime =
-        tokenExpirationDate.getTime() - new Date().getTime();
-      logoutTimer = setTimeout(logout, remainingTime);
-      console.log("Auto logout set for:", remainingTime / 1000, "seconds");
-    } else {
-      clearTimeout(logoutTimer);
-    }
-  }, [token, logout, tokenExpirationDate]);
-
-  
-  // This effect retrieves userData from localStorage and logs the user in if the token is still valid.
-  useEffect(() => {
+const getInitialState = () => {
+  try {
     const storedData = JSON.parse(localStorage.getItem("userData"));
     if (
       storedData &&
       storedData.token &&
       new Date(storedData.expiration) > new Date()
     ) {
-      login(
-        storedData.userId,
-        storedData.token,
-        storedData.credit,
-        storedData.refCode,
-        new Date(storedData.expiration)
-      );
+      return {
+        token: storedData.token,
+        userId: storedData.userId,
+        credit: storedData.credit,
+        refCode: storedData.refCode,
+        name: storedData.name,
+        email: storedData.email,
+      };
     }
-  }, [login]);
+    // Token exists but is expired — clean it up
+    if (storedData) {
+      localStorage.removeItem("userData");
+    }
+  } catch (error) {
+    console.error("Failed to parse userData from localStorage", error);
+    localStorage.removeItem("userData");
+  }
+  return {
+    token: null,
+    userId: null,
+    credit: null,
+    refCode: null,
+    name: null,
+    email: null,
+  };
+};
 
-  return { token, login, logout, userId, credit, updateCredit, refCode };
+const useAuth = () => {
+  const [initialState] = useState(getInitialState);
+
+  const [token, setToken] = useState(initialState.token);
+  const [userId, setUserId] = useState(initialState.userId);
+  const [credit, setCredit] = useState(initialState.credit);
+  const [refCode, setRefCode] = useState(initialState.refCode);
+  const [name, setName] = useState(initialState.name);
+  const [email, setEmail] = useState(initialState.email);
+
+  const login = useCallback((uid, tok, currentCredit, referralCode, _expirationDate, userName, userEmail) => {
+    setToken(tok);
+    setUserId(uid);
+    setCredit(currentCredit);
+    setRefCode(referralCode);
+    setName(userName);
+    setEmail(userEmail);
+
+    const expiration = new Date(Date.now() + TOKEN_LIFETIME_MS);
+
+    localStorage.setItem(
+      "userData",
+      JSON.stringify({
+        userId: uid,
+        token: tok,
+        expiration: expiration.toISOString(),
+        credit: currentCredit,
+        refCode: referralCode,
+        name: userName,
+        email: userEmail,
+      })
+    );
+  }, []);
+
+  const logout = useCallback(() => {
+    setToken(null);
+    setUserId(null);
+    setCredit(null);
+    setRefCode(null);
+    setName(null);
+    setEmail(null);
+    localStorage.removeItem("userData");
+  }, []);
+
+  const updateCredit = useCallback((newCredit) => {
+    setCredit(newCredit);
+    try {
+      const storedData = JSON.parse(localStorage.getItem("userData"));
+      if (storedData) {
+        storedData.credit = newCredit;
+        localStorage.setItem("userData", JSON.stringify(storedData));
+      }
+    } catch (error) {
+      console.error("Failed to update credit in localStorage", error);
+    }
+  }, []);
+
+  // No client-side auto-logout timer needed.
+  // The backend rejects expired tokens with 401, and the API layer
+  // handles that by calling logout() (see services/api.js).
+
+  return { token, login, logout, userId, credit, updateCredit, refCode, name, email };
 };
 
 export default useAuth;

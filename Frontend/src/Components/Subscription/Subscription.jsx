@@ -1,138 +1,278 @@
-import React, { useContext } from "react";
+import React, { useState, useEffect, useContext } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion } from "motion/react";
+import { Check, ShieldCheck, Wallet, ArrowRight } from "lucide-react";
 import AuthContext from "../../Context/AuthContext";
+import { ConfigContext } from "../../Context/ConfigContext";
+import { getPlans, makePayment, validatePayment } from "../../services/api";
+import { useToast } from "../Toast/ToastContext";
+import FullPageSpinner from "../UI/FullPageSpinner";
+import PageHeader from "../UI/PageHeader";
+
+const PLAN_THEMES = [
+  {
+    name: "Starter Pack",
+    desc: "Perfect for quick revision sessions",
+    popular: false,
+    accent: "var(--md-outline)",
+  },
+  {
+    name: "Standard Pack",
+    desc: "Great value for mid-term exams",
+    popular: false,
+    accent: "var(--md-secondary)",
+  },
+  {
+    name: "Elite Scholar Pack",
+    desc: "Unrestricted access for peak prep",
+    popular: true,
+    accent: "var(--md-primary)",
+  },
+];
 
 export default function Subscription() {
   const auth = useContext(AuthContext);
-  const amount = 499 * 100;
-  const currency = "INR";
-  const receiptId = "qwsaq1";
+  const { unlockCost } = useContext(ConfigContext);
+  const navigate = useNavigate();
+  const toast = useToast();
 
-  const apiUrl = import.meta.env.VITE_RAZORPAY_TEST;
-  const paymentHandler = async (e) => {
-    e.preventDefault();
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [payingPlanId, setPayingPlanId] = useState(null);
 
+  useEffect(() => {
+    getPlans()
+      .then((data) => setPlans((data || []).sort((a, b) => a.amount - b.amount)))
+      .catch(() => toast.error("Failed to fetch plans"))
+      .finally(() => setLoading(false));
+  }, [toast]);
+
+  const loadRazorpayScript = () =>
+    new Promise((resolve) => {
+      if (window.Razorpay) return resolve(true);
+      if (document.getElementById("razorpay-checkout-script")) return resolve(true);
+      
+      const script = document.createElement("script");
+      script.id = "razorpay-checkout-script";
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+
+  const handlePurchase = async (plan) => {
+    if (!auth.isLoggedIn || !auth.token) {
+      toast.warning("Please sign in to purchase credits.");
+      navigate("/login");
+      return;
+    }
+    setPayingPlanId(plan.amount);
+    const scriptLoaded = await loadRazorpayScript();
+    if (!scriptLoaded) {
+      toast.error("Razorpay SDK failed to load. Are you offline?");
+      setPayingPlanId(null);
+      return;
+    }
     try {
-      const response = await fetch("http://localhost:8000/makePayment", {
-        method: "POST",
-        body: JSON.stringify({ amount, currency, receipt: receiptId }),
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + auth.token,
+      const receiptId = `receipt_${Date.now()}_${auth.userId?.substring(0, 5)}`;
+      const order = await makePayment({ amount: plan.amount, currency: "INR", receipt: receiptId }, auth.token);
+      const rzpKey = import.meta.env.VITE_RAZORPAY_TEST;
+      const options = {
+        key: rzpKey,
+        amount: plan.amount,
+        currency: "INR",
+        name: "Exam Repository",
+        description: `Purchase ${plan.credits} Credits`,
+        order_id: order.id,
+        theme: { color: getComputedStyle(document.documentElement).getPropertyValue('--md-primary').trim() },
+        handler: async (response) => {
+          try {
+            toast.info("Verifying transaction…");
+            const validateRes = await validatePayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            }, auth.token);
+            auth.updateCredit(validateRes.credit);
+            toast.success(`Successfully added ${plan.credits} credits!`);
+            navigate("/");
+          } catch (error) {
+            toast.error(error.message || "Payment verification failed");
+          }
         },
+        prefill: { name: auth.name || "", email: auth.email || "" },
+        modal: { ondismiss: () => setPayingPlanId(null) },
+      };
+      const rzp1 = new window.Razorpay(options);
+      rzp1.on("payment.failed", (response) => {
+        toast.error(`Payment failed: ${response.error.description}`);
+        setPayingPlanId(null);
       });
-
-      const order = await response.json();
-      if (!window.Razorpay) {
-        const script = document.createElement("script");
-        script.src = "https://checkout.razorpay.com/v1/checkout.js";
-        script.async = true;
-        script.onload = () => initializeRazorpay(order);
-        document.body.appendChild(script);
-      } else {
-        initializeRazorpay(order);
-      }
+      rzp1.open();
     } catch (error) {
-      console.error("Error initiating payment:", error);
+      toast.error(error.message || "Failed to initiate payment");
+      setPayingPlanId(null);
     }
   };
 
-  const initializeRazorpay = (order) => {
-    // console.log( process.env.REACT_APP_RAZORPAY_TEST);
-    const options = {
-      key: apiUrl  ,
-      amount,
-      currency,
-      name: "Exammer",
-      description: "Subscription",
-      image: "https://example.com/your_logo",
-      order_id: order.id,
-      notes: {
-        address: "Razorpay Corporate Office",
-      },
-      theme: {
-        color: "#3399cc",
-      },
-      handler: async function (response) {
-        try {
-          const validateRes = await fetch(
-            "http://localhost:8000/validatePayment",
-            {
-              method: "POST",
-              body: JSON.stringify({ ...response, amount , "credit":auth.credit }),
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: "Bearer " + auth.token,
-              },
-            }
-          );
-
-          const res = await validateRes.json();
-          auth.updateCredit(res.credit);
-        } catch (error) {
-          console.error("Error validating payment:", error);
-        }
-      },
-    };
-
-    const rzp1 = new window.Razorpay(options);
-
-    rzp1.on("payment.failed", function (response) {
-      alert("Payment failed: " + response.error.description);
-    });
-
-    rzp1.open();
-  };
+  if (loading) {
+    return <FullPageSpinner />;
+  }
 
   return (
-    <>
-      <section className="bg-white dark:bg-gray-900 mt-10">
-        <div className="py-8 px-4 mx-auto max-w-screen-xl lg:py-16 lg:px-6">
-          <div className="mx-auto max-w-screen-md text-center mb-8 lg:mb-12">
-            <h2 className="mb-4 text-4xl tracking-tight font-extrabold text-gray-900 dark:text-white">
-              Unlock Knowledge with Credits
-            </h2>
-            <p className="mb-5 font-light text-gray-500 sm:text-xl dark:text-gray-400">
-              Get access to expert-verified answers by using credits. Purchase credits and explore a world of valuable knowledge.
-            </p>
-          </div>
-          <div className="space-y-8 sm:gap-6 xl:gap-10 lg:space-y-0">
-            <div className="flex flex-col p-6 mx-auto max-w-lg text-center text-gray-900 bg-white rounded-lg border border-gray-100 shadow dark:border-gray-600 xl:p-8 dark:bg-gray-800 dark:text-white">
-              <h3 className="mb-4 text-2xl font-semibold">Credit Plan</h3>
-              <p className="font-light text-gray-500 sm:text-lg dark:text-gray-400">
-                Purchase credits to unlock answers and enhance your learning experience.
-              </p>
-              <div className="flex justify-center items-baseline my-8">
-                <span className="mr-2 text-5xl font-extrabold">₹500</span>
-                <span className="text-gray-500 dark:text-gray-400">for 10,000 Credits</span>
-              </div>
-              <ul role="list" className="mb-8 space-y-4 text-left">
-                <li className="flex items-center space-x-3">
-                  <span>Each answer unlocks with credits</span>
-                </li>
-                <li className="flex items-center space-x-3">
-                  <span>No hidden fees, pay only for what you use</span>
-                </li>
-                <li className="flex items-center space-x-3">
-                  <span>
-                    Validity: <span className="font-semibold">Lifetime</span>
-                  </span>
-                </li>
-                <li className="flex items-center space-x-3">
-                  <span>
-                    Premium support: <span className="font-semibold">24/7 Assistance</span>
-                  </span>
-                </li>
-              </ul>
-              <button
-                onClick={paymentHandler}
-                className="text-white bg-primary-600 hover:bg-primary-700 focus:ring-4 focus:ring-primary-200 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:text-white dark:focus:ring-primary-900 bg-blue-600"
-              >
-                Buy Credits
-              </button>
+    <div className="page-wrapper with-navbar dot-pattern-bg">
+      <div className="page-content">
+        {/* Header */}
+        <PageHeader
+          label="Pricing Packs"
+          title={<>Power Your Learning with <span className="italic-serif">Credits</span></>}
+          description="Use credits to unlock step-by-step solutions forever. No subscriptions, just one-time top-ups when you need them."
+          style={{ marginBottom: auth.isLoggedIn ? 24 : 48 }}
+        />
+
+        {auth.isLoggedIn && (
+          <div className="sub-balance-row">
+            <div className="sub-balance-badge">
+              <Wallet size={14} className="icon-primary" />
+              <span className="text-body-medium sub-balance-text">
+                Balance: {auth.credit ?? 0} Credits
+              </span>
             </div>
           </div>
+        )}
+
+        {/* Plans Grid */}
+        <div className="sub-plans-grid">
+          {plans.map((plan, index) => {
+            const theme = PLAN_THEMES[index] || {
+              name: `Tier ${index + 1}`, desc: "Add credits", popular: false,
+              accent: "var(--md-primary)",
+            };
+            const priceInRupees = plan.amount / 100;
+
+            const totalQuestions = unlockCost ? Math.floor(plan.credits / unlockCost) : "...";
+            const standardPapers = unlockCost ? Math.round(totalQuestions / 7) : "...";
+            const quizPapers = unlockCost ? Math.floor(totalQuestions / 10) : "...";
+
+            return (
+              <motion.div
+                key={plan.amount}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: index * 0.1 }}
+                className="card-elevated sub-plan-card"
+                style={{
+                  border: theme.popular ? `2px solid ${theme.accent}` : "1px solid var(--md-outline-variant)",
+                }}
+              >
+                {/* Colored Top Strip */}
+                <div className="sub-plan-top-strip" style={{ background: theme.accent }} />
+
+                {theme.popular && (
+                  <div className="sub-popular-tag-container">
+                    <span
+                      className="sub-popular-tag"
+                      style={{
+                        background: theme.accent,
+                        border: `1px solid ${theme.accent}`,
+                      }}
+                    >
+                      ★ Best Value
+                    </span>
+                  </div>
+                )}
+
+                <div className="sub-plan-body">
+                  <h3 className="serif-heading sub-plan-title">
+                    {theme.name}
+                  </h3>
+                  <p className="text-body-small sub-plan-desc">
+                    {theme.desc}
+                  </p>
+
+                  <div className="sub-plan-price-wrap">
+                    <span className="serif-heading sub-plan-price-val">
+                      ₹{priceInRupees}
+                    </span>
+                    <span className="text-body-medium sub-plan-price-suffix">
+                      one-time
+                    </span>
+                  </div>
+
+                  <div className="sub-plan-divider" />
+
+                  <ul className="sub-plan-features">
+                    <li className="sub-plan-feature-item">
+                      <div className="sub-feature-icon-wrapper">
+                        <Check size={10} className="icon-success" />
+                      </div>
+                      <span className="text-body-medium sub-feature-text">
+                        {plan.credits} Credits added to account
+                      </span>
+                    </li>
+                    <li className="sub-plan-feature-item">
+                      <div className="sub-feature-icon-wrapper">
+                        <Check size={10} className="icon-success" />
+                      </div>
+                      <span className="text-body-medium sub-feature-text">
+                        Unlocks ~{totalQuestions} questions
+                      </span>
+                    </li>
+                    <li className="sub-plan-feature-item">
+                      <div className="sub-feature-icon-wrapper">
+                        <Check size={10} className="icon-success" />
+                      </div>
+                      <span className="text-body-medium sub-feature-text">
+                        Unlocks ~{standardPapers} papers*
+                      </span>
+                    </li>
+                    <li className="sub-plan-feature-item">
+                      <div className="sub-feature-icon-wrapper">
+                        <Check size={10} className="icon-success" />
+                      </div>
+                      <span className="text-body-medium sub-feature-text">
+                        Unlocks ~{quizPapers} quiz papers*
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="sub-plan-footer">
+                  <button
+                    disabled={payingPlanId !== null}
+                    className={`${theme.popular ? "btn-filled" : "btn-outlined"} sub-plan-action-btn`}
+                    onClick={() => handlePurchase(plan, index)}
+                  >
+                    {payingPlanId === plan.amount ? (
+                      <>
+                        <div className="spinner" style={{ width: 14, height: 14, borderTopColor: theme.popular ? "white" : "var(--md-primary)" }} />
+                        <span>Securing Checkout…</span>
+                      </>
+                    ) : (
+                      <>Select Plan <ArrowRight size={14} /></>
+                    )}
+                  </button>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
-      </section>
-    </>
+
+        <div className="sub-footnote">
+          *Estimates based on an average of 6–7 questions per paper and 10 questions per quiz paper ({unlockCost || "..."} credits per question).
+        </div>
+
+        {/* Trust Badge */}
+        <div className="card-elevated sub-trust-card">
+          <div className="sub-trust-icon-box">
+            <ShieldCheck size={22} className="icon-primary" />
+          </div>
+          <p className="text-body-medium sub-trust-text">
+            Payments are handled securely via Razorpay with industry-leading encryption. We do not store card details or payment credentials on our servers. For support or invoice questions, please contact our team.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }

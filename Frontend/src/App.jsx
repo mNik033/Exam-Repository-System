@@ -1,70 +1,107 @@
-import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import React, { useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import AuthContext from "./Context/AuthContext";
 import useAuth from "./Hooks/AuthHook";
+import { setOnUnauthorized } from "./services/api";
 
-import Navbar from "../src/Components/Navbar/Navbar";
+// Providers
+import { ToastProvider } from "./Components/Toast/Toast";
+import { ConfirmProvider } from "./Components/ConfirmModal/ConfirmModal";
+import { ConfigProvider } from "./Context/ConfigContext";
+
+// Components
+import Navbar from "./Components/Navbar/Navbar";
 import Signup from "./Components/Signup/Signup";
 import Login from "./Components/Login/Login";
 import Footer from "./Components/Footer/Footer";
 import Hero from "./Components/Hero/Hero";
-import Upload  from "./Components/Upload/Upload";
+import Upload from "./Components/Upload/Upload";
 import Subscription from "./Components/Subscription/Subscription";
-import Question from "./Components/Question/Question";
-import Spinnerr from "./Components/Spinner/Spinner";
 import Dashboard from "./Components/Dashboard/Dashboard";
+import PapersList from "./Components/Papers/PapersList";
+import PaperDetail from "./Components/Papers/PaperDetail";
 import AboutUs from "./Components/AboutUs/AboutUs";
+import ErrorBoundary from "./Components/UI/ErrorBoundary";
 
-function App() {
-  const { token, login, logout, userId, credit, updateCredit, refCode } = useAuth();
+const ProtectedRoute = ({ children }) => {
+  const auth = React.useContext(AuthContext);
+  if (!auth.isLoggedIn) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
+export default function App() {
+  const { token, login, logout, userId, credit, updateCredit, refCode, name, email } = useAuth();
+
+  useEffect(() => {
+    setOnUnauthorized(logout);
+    return () => setOnUnauthorized(null);
+  }, [logout]);
+
+  const isLoggedIn = !!token && !!userId;
 
   return (
     <AuthContext.Provider
       value={{
-        isLoggedIn: !!token,
-        token: token,
-        userId: userId,
-        login: login,
-        logout: logout,
-        credit: credit,
-        refCode: refCode, 
-        updateCredit: updateCredit,
+        isLoggedIn,
+        token,
+        userId,
+        login,
+        logout,
+        credit,
+        refCode,
+        updateCredit,
+        name,
+        email,
       }}
     >
-      <Router>
-      <div className="flex flex-col  min-h-screen bg-gray-900">
-        <Navbar />
-        <main className="flex-grow">
-          <Routes>
-            {!userId ? (
-              <>
-                <Route path="/" element={<Hero />} />
-                <Route path="/signup" element={<Signup />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/subscription" element={<Subscription />} />
-                <Route path="/*" element={<Signup />} />
-              </>
-            ) : (
-              <>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/upload" element={<Upload />} />
-                <Route path="/subscription" element={<Subscription />} />
-                <Route path="/papers" element={<Question />} />
-                <Route path="/spinner" element={<Spinnerr />} />
-                <Route path="/dashboard" element={<Dashboard />} />                
-                <Route path="/paper/:id" element={<Question />} />
-                <Route path="/aboutUs" element={<AboutUs/>} />
-                <Route path="/*" element={<Dashboard />} />
-                
-              </>
-            )}
-          </Routes>
-        </main>
-        <Footer />
-        </div>
-      </Router>
+      <ConfigProvider>
+        <ToastProvider>
+          <ConfirmProvider>
+            <Router>
+              <div
+                className="flex flex-col min-h-screen"
+                style={{
+                  backgroundColor: "var(--md-background)",
+                  color: "var(--md-on-background)",
+                }}
+              >
+                <Navbar />
+                <main className="flex-grow">
+                  <ErrorBoundary>
+                    <Routes>
+                      {!isLoggedIn ? (
+                        <>
+                          <Route path="/" element={<Hero />} />
+                          <Route path="/signup" element={<Signup />} />
+                          <Route path="/login" element={<Login />} />
+                          <Route path="/subscription" element={<Subscription />} />
+                          <Route path="/aboutUs" element={<AboutUs />} />
+                          {/* Catch-all redirects to home hero page */}
+                          <Route path="/*" element={<Navigate to="/" replace />} />
+                        </>
+                      ) : (
+                        <>
+                          <Route path="/" element={<Dashboard />} />
+                          <Route path="/dashboard" element={<Dashboard />} />
+                          <Route path="/upload" element={<Upload />} />
+                          <Route path="/subscription" element={<Subscription />} />
+                          <Route path="/papers" element={<PapersList />} />
+                          <Route path="/paper/:id" element={<PaperDetail />} />
+                          <Route path="/aboutUs" element={<AboutUs />} />
+                          {/* Catch-all redirects to dashboard */}
+                          <Route path="/*" element={<Navigate to="/" replace />} />
+                        </>
+                      )}
+                    </Routes>
+                  </ErrorBoundary>
+                </main>
+                <Footer />
+              </div>
+            </Router>
+          </ConfirmProvider>
+        </ToastProvider>
+      </ConfigProvider>
     </AuthContext.Provider>
   );
 }
-
-export default App;
