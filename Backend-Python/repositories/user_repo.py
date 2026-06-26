@@ -76,15 +76,15 @@ async def mark_notifications_read(user_id: str) -> None:
         {"$set": {"notifications.$[].is_read": True}}
     )
 
-async def unlock_answer(user_id: str, question_id: str) -> bool:
+async def unlock_answer(user_id: str, question_id: str, cost: int) -> bool:
     result = await users.update_one(
         {
             "_id": ObjectId(user_id),
-            "credit": {"$gte": 5},
+            "credit": {"$gte": cost},
             "unlocked_answers": {"$ne": question_id}
         },
         {
-            "$inc": {"credit": -5},
+            "$inc": {"credit": -cost},
             "$push": {"unlocked_answers": question_id}
         }
     )

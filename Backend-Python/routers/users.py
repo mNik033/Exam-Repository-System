@@ -6,6 +6,7 @@ from security import hash_password, verify_password, create_access_token, get_cu
 from repositories import user_repo, paper_repo
 from models.user import User, Notification
 from schemas.user import UserSignupRequest, AuthResponse, LoginRequest, ProfileResponse, UnlockAnswerResponse
+from config import settings
 
 router = APIRouter(prefix="/api", tags=["Users"])
 
@@ -90,16 +91,16 @@ async def unlock_answer(
     question_id: str, 
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.credit < 5:
+    if current_user.credit < settings.UNLOCK_COST:
         raise HTTPException(status_code=402, detail="Insufficient credits")
 
-    success = await user_repo.unlock_answer(current_user.id, question_id)
+    success = await user_repo.unlock_answer(current_user.id, question_id, settings.UNLOCK_COST)
     if not success:
         raise HTTPException(status_code=400, detail="Failed to unlock answer")
 
     return UnlockAnswerResponse(
         message="Answer unlocked successfully", 
-        credit=current_user.credit - 5
+        credit=current_user.credit - settings.UNLOCK_COST
     )
 
 @router.get("/getUnlockedAnswers")

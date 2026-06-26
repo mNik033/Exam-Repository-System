@@ -62,6 +62,12 @@ app.include_router(payments_router)
 async def health_check():
     return {"status": "healthy"}
 
+@app.get("/api/config")
+async def get_config():
+    return {
+        "unlock_cost": settings.UNLOCK_COST
+    }
+
 async def scan_and_process_pending_papers():
     pending_prefix = "pending_"
     pending_files = [f for f in os.listdir('uploads') if f.startswith(pending_prefix)]
