@@ -57,4 +57,5 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if not user_dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
+    user_dict["_id"] = str(user_dict["_id"])
     return User(**user_dict)
