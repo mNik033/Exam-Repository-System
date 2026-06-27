@@ -90,5 +90,5 @@ async def validate_payment(
     if credits_to_add is None:
         raise HTTPException(status_code=400, detail="Invalid payment amount")
 
-    await user_repo.update_credits(current_user.id, credits_to_add)
-    return {"credit": current_user.credit + credits_to_add}
+    new_credit = await user_repo.update_credits(current_user.id, credits_to_add)
+    return {"credit": new_credit}

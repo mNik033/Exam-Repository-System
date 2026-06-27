@@ -38,11 +38,13 @@ async def create_user(user: User) -> str:
     # return the generated ObjectId as a string
     return str(result.inserted_id)
 
-async def update_credits(user_id: str, amount: int) -> None:
-    await users.update_one(
+async def update_credits(user_id: str, amount: int) -> int | None:
+    result = await users.find_one_and_update(
         {"_id": ObjectId(user_id)},
-        {"$inc": {"credit": amount}}
+        {"$inc": {"credit": amount}},
+        return_document=True
     )
+    return result["credit"] if result else None
 
 async def add_notification(
     user_id: str, message: str, type: str, paper_id: str | None = None
@@ -76,8 +78,8 @@ async def mark_notifications_read(user_id: str) -> None:
         {"$set": {"notifications.$[].is_read": True}}
     )
 
-async def unlock_answer(user_id: str, question_id: str, cost: int) -> bool:
-    result = await users.update_one(
+async def unlock_answer(user_id: str, question_id: str, cost: int) -> int | None:
+    result = await users.find_one_and_update(
         {
             "_id": ObjectId(user_id),
             "credit": {"$gte": cost},
@@ -86,10 +88,11 @@ async def unlock_answer(user_id: str, question_id: str, cost: int) -> bool:
         {
             "$inc": {"credit": -cost},
             "$push": {"unlocked_answers": question_id}
-        }
+        },
+        return_document=True
     )
 
-    return result.modified_count > 0
+    return result["credit"] if result else None
 
 async def add_browsed_course(user_id: str, course_id: str) -> None:
     await users.update_one(

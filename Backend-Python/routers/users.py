@@ -94,13 +94,13 @@ async def unlock_answer(
     if current_user.credit < settings.UNLOCK_COST:
         raise HTTPException(status_code=402, detail="Insufficient credits")
 
-    success = await user_repo.unlock_answer(current_user.id, question_id, settings.UNLOCK_COST)
-    if not success:
+    new_credit = await user_repo.unlock_answer(current_user.id, question_id, settings.UNLOCK_COST)
+    if new_credit is None:
         raise HTTPException(status_code=400, detail="Failed to unlock answer")
 
     return UnlockAnswerResponse(
         message="Answer unlocked successfully", 
-        credit=current_user.credit - settings.UNLOCK_COST
+        credit=new_credit
     )
 
 @router.get("/getUnlockedAnswers")
