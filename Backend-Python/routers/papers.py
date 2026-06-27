@@ -1,3 +1,4 @@
+import blake3
 import os
 import shutil
 import time
@@ -6,7 +7,7 @@ from datetime import datetime
 from bson import ObjectId
 from fastapi import APIRouter, File, UploadFile, Depends, BackgroundTasks, status, HTTPException
 
-from repositories import course_repo, paper_repo, question_repo, user_repo
+from repositories import course_repo, paper_repo, question_repo, user_repo, upload_registry_repo
 from models.paper import Paper
 from models.user import User
 from security import get_current_user
@@ -67,6 +68,39 @@ async def get_my_papers(current_user: User = Depends(get_current_user)):
     pending_papers.sort(key=lambda x: x.created_at, reverse=True)
     return pending_papers + papers_list
 
+async def check_duplicate_and_lock(file_hash: str, user_id: str):
+    # try to lock the file for processing
+    is_new = await upload_registry_repo.create_record(file_hash, user_id)
+    if is_new:
+        return
+    
+    record = await upload_registry_repo.get_record(file_hash)
+    if not record: # the file was processed just as we got here
+        return
+
+    if record.status == "processing":
+        await upload_registry_repo.add_subscriber(file_hash, user_id)
+        raise HTTPException(
+            status_code=409,
+            detail="This file is already being processed. You'll be notified once processing is complete."
+        )
+    elif record.status == "completed":
+        await user_repo.add_notification(
+            user_id,
+            message="This paper has already been processed. Click on this notification to view the paper.",
+            type="info",
+            paper_id=record.paper_id
+        )
+        raise HTTPException(
+            status_code=409,
+            detail="This paper has already been processed. Check your notifications for the same."
+        )
+    elif record.status == "rejected":
+        raise HTTPException(
+            status_code=422,
+            detail="This paper has previously been analyzed and rejected. Please ensure you're uploading a valid exam paper."
+        )
+
 @router.post("/uploadPaper", status_code=status.HTTP_202_ACCEPTED, response_model=UploadPaperResponse)
 async def upload_paper(
     background_tasks: BackgroundTasks,
@@ -87,6 +121,13 @@ async def upload_paper(
             detail="Invalid file format. Only true PDF, JPEG, and PNG files are supported."
         )
 
+    # hashing and deduplication
+    file_bytes = await file.read()
+    file_hash = blake3.blake3(file_bytes).hexdigest()
+    await file.seek(0)
+
+    await check_duplicate_and_lock(file_hash, current_user.id)
+
     file_extension = file.filename.split(".")[-1]
     
     # sanitize the original filename to keep it safe for paths and splits
@@ -100,7 +141,7 @@ async def upload_paper(
         safe_filename = f"{base_name[:100]}.{file_extension}"
     
     timestamp = int(time.time())
-    temp_filename = f"pending_{timestamp}_{current_user.id}_{uuid.uuid4()}_{safe_filename}"
+    temp_filename = f"pending_{timestamp}_{current_user.id}_{file_hash}_{safe_filename}"
     temp_path = f"uploads/{temp_filename}"
 
     with open(temp_path, "wb") as buffer:

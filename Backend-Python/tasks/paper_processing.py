@@ -6,7 +6,7 @@ import asyncio
 import mimetypes
 
 from models.question import Question
-from repositories import paper_repo, question_repo, user_repo, course_repo
+from repositories import paper_repo, question_repo, user_repo, course_repo, upload_registry_repo
 from services import gemini
 
 logger = logging.getLogger(__name__)
@@ -163,6 +163,22 @@ async def _resolve_course(course_code: str, course_name: str):
 
     return None
 
+async def _notify_subscribers(
+    subscribers: list[str], 
+    message: str, 
+    type: str, 
+    paper_id: str | None = None
+):
+    for sub in subscribers:
+        try:
+            await user_repo.add_notification(
+                user_id=sub,
+                message=message,
+                type=type,
+                paper_id=paper_id
+            )
+        except Exception as e:
+            logger.error("Failed to notify subscriber %s: %s", sub, e)
 
 # ── Core Task ─────────────────────────────────────────────────────────
 
@@ -172,6 +188,9 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
 
     file_name = None
     cache_name = None
+
+    local_filename = os.path.basename(file_path)
+    file_hash = local_filename.split("_")[3]
 
     try:
         mime_type = _get_mime_type(file_path)
@@ -193,8 +212,9 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
         # Step 3: validate extraction
         if not _is_extraction_valid(extracted_data):
             logger.warning("Step 3: Paper rejected (unreadable/invalid).")
-            await user_repo.add_notification(
-                user_id=user_id,
+            subscribers = await upload_registry_repo.mark_rejected(file_hash)
+            await _notify_subscribers(
+                subscribers=subscribers,
                 message="We couldn't process your uploaded paper. It may be unreadable or not a valid exam paper.",
                 type="error"
             )
@@ -206,8 +226,9 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
         course = await _resolve_course(extracted_data.course.code, extracted_data.course.name)
         if not course:
             logger.warning("Step 4: Course not found. Rejecting.")
-            await user_repo.add_notification(
-                user_id=user_id,
+            subscribers = await upload_registry_repo.mark_rejected(file_hash)
+            await _notify_subscribers(
+                subscribers=subscribers,
                 message=f"Paper rejected: we couldn't match '{extracted_data.course.code}' to a supported course.",
                 type="error"
             )
@@ -225,8 +246,9 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
 
         if duplicate_paper_id:
             logger.warning("Step 5: Duplicate paper. Rejecting.")
-            await user_repo.add_notification(
-                user_id=user_id,
+            subscribers = await upload_registry_repo.mark_completed(file_hash, duplicate_paper_id)
+            await _notify_subscribers(
+                subscribers=subscribers,
                 message=f"Your uploaded paper for {course.code} ({extracted_data.session}, {extracted_data.sessionYear}, {extracted_data.examType}) is already in the database.",
                 type="info",
                 paper_id=duplicate_paper_id
@@ -297,22 +319,33 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
 
         # Step 11: award credits and notify
         logger.info("Step 11: Awarding credits and notifying user...")
-        await user_repo.update_credits(user_id, 100)
-        await user_repo.add_notification(
-            user_id=user_id,
-            message=f"Your paper '{paper_title}' has been successfully processed! +100 credits awarded.",
-            type="success",
-            paper_id=paper_id
-        )
-
+        subscribers = await upload_registry_repo.mark_completed(file_hash, paper_id)
+        for sub in subscribers:
+            # only award credits to the original uploader
+            if sub == user_id:
+                await user_repo.update_credits(sub, 100)
+                msg = f"Your paper '{paper_title}' has been successfully processed! +100 credits awarded."
+            else:
+                msg = f"A paper you tried to upload ('{paper_title}') has finished processing!"
+            await user_repo.add_notification(
+                user_id=sub,
+                message=msg,
+                type="success",
+                paper_id=paper_id
+            )
+        
         await _cleanup_assets(file_path, file_name, cache_name, False)
         logger.info("Processing complete: %s", paper_title)
     
     except Exception as e:
         logger.error("Paper processing failed: %s", e, exc_info=True)
         try:
-            await user_repo.add_notification(
-                user_id=user_id,
+            subscribers = [user_id]
+            db_subs = await upload_registry_repo.delete_record(file_hash)
+            if db_subs:
+                subscribers = db_subs
+            await _notify_subscribers(
+                subscribers=subscribers,
                 message="An error occurred while processing your paper. Please try again later.",
                 type="error"
             )
