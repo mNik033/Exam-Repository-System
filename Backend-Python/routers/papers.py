@@ -5,7 +5,7 @@ import time
 import uuid
 from datetime import datetime
 from bson import ObjectId
-from fastapi import APIRouter, File, UploadFile, Depends, BackgroundTasks, status, HTTPException
+from fastapi import APIRouter, File, UploadFile, Depends, BackgroundTasks, Request, status, HTTPException
 
 from repositories import course_repo, paper_repo, question_repo, user_repo, upload_registry_repo
 from models.paper import Paper
@@ -22,6 +22,25 @@ from schemas.paper import (
 from tasks.paper_processing import process_uploaded_paper_task
 
 router = APIRouter(prefix="/api", tags=["Papers"])
+
+MAX_FILE_SIZE = 10 * 1024 * 1024
+
+async def _read_file_with_size_limit(file: UploadFile, max_size: int = MAX_FILE_SIZE) -> bytes:
+    file_bytes = bytearray()
+    
+    await file.seek(0)
+    
+    while chunk := await file.read(1024 * 1024):
+        file_bytes.extend(chunk)
+        if len(file_bytes) > max_size:
+            raise HTTPException(
+                status_code=413, 
+                detail=f"File is too large. Maximum size is {max_size // (1024*1024)}MB."
+            )
+            
+    await file.seek(0)
+    
+    return bytes(file_bytes)
 
 @router.get("/getPapers", response_model=list[Paper])
 async def get_papers():
@@ -103,10 +122,19 @@ async def check_duplicate_and_lock(file_hash: str, user_id: str):
 
 @router.post("/uploadPaper", status_code=status.HTTP_202_ACCEPTED, response_model=UploadPaperResponse)
 async def upload_paper(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user)
 ):
+    # fast rejection based on headers
+    if "content-length" in request.headers:
+        if int(request.headers["content-length"]) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413, 
+                detail=f"File is too large. Maximum limit is {MAX_FILE_SIZE//(1024*1024)}MB."
+            )
+
     # magic number validation
     header = await file.read(10)
     await file.seek(0)
@@ -122,7 +150,7 @@ async def upload_paper(
         )
 
     # hashing and deduplication
-    file_bytes = await file.read()
+    file_bytes = await _read_file_with_size_limit(file)
     file_hash = blake3.blake3(file_bytes).hexdigest()
     await file.seek(0)
 
