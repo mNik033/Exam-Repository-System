@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str
     RAZORPAY_KEY: str
     RAZORPAY_SECRET: str
+    RAZORPAY_WEBHOOK_SECRET: str
     UNLOCK_COST: int = 5
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
