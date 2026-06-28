@@ -2,7 +2,7 @@ import secrets
 import string
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from security import hash_password, verify_password, create_access_token, get_current_user
+from security import hash_password, verify_password, create_access_token, get_current_user, guard
 from repositories import user_repo, paper_repo
 from models.user import User, Notification
 from schemas.user import UserSignupRequest, AuthResponse, LoginRequest, ProfileResponse, UnlockAnswerResponse
@@ -15,6 +15,7 @@ def generate_referral_code(length: int = 8) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 @router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+@guard.rate_limit(requests=5, window=60)
 async def signup(payload: UserSignupRequest):
     existing_user = await user_repo.get_user_by_email(payload.email)
     if existing_user:
@@ -54,6 +55,7 @@ async def signup(payload: UserSignupRequest):
     )
 
 @router.post("/login", response_model=AuthResponse)
+@guard.rate_limit(requests=5, window=60)
 async def login(payload: LoginRequest):
     user = await user_repo.get_user_by_email(payload.email)
     if not user or not verify_password(payload.password, user.password_hash):
@@ -87,6 +89,7 @@ async def get_notifications(current_user: User = Depends(get_current_user)):
     return notifications
 
 @router.post("/unlockAnswer", response_model=UnlockAnswerResponse)
+@guard.rate_limit(requests=20, window=60)
 async def unlock_answer(
     question_id: str, 
     current_user: User = Depends(get_current_user)

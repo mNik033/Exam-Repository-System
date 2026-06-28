@@ -46,6 +46,13 @@ async function request(endpoint, options = {}) {
       errorData = { detail: response.statusText };
     }
 
+    // Intercept size and rate limits globally
+    if (response.status === 429) {
+      errorData.detail = "You are doing that too fast. Please wait a moment before trying again.";
+    } else if (response.status === 413) {
+      errorData.detail = `File size is too large. Please upload a file smaller than 10MB.`;
+    }
+
     // Auto-logout on expired/invalid token
     if (response.status === 401 && token && _onUnauthorized) {
       _onUnauthorized();

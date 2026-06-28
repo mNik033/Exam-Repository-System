@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from guard import SecurityConfig, SecurityDecorator
 import jwt
 import bcrypt
 from bson import ObjectId
@@ -14,6 +15,19 @@ security_scheme = HTTPBearer()
 
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+
+security_config = SecurityConfig(
+    enable_rate_limiting=True,
+    rate_limit=300,
+    rate_limit_window=60,
+    enable_ip_banning=True,
+    auto_ban_threshold=5,
+    auto_ban_duration=86400,
+    custom_log_file="security.log",
+    block_cloud_providers={"AWS", "GCP", "Azure"},
+)
+
+guard = SecurityDecorator(security_config)
 
 def hash_password(password: str) -> str:
     pwd_bytes = password.encode('utf-8')

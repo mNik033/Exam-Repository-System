@@ -5,9 +5,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from guard.middleware import SecurityMiddleware
 
 from config import settings
 from database import client
+from security import security_config, guard
 
 from routers.users import router as users_router
 from routers.courses import router as courses_router
@@ -41,6 +43,13 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.add_middleware(
+    SecurityMiddleware,
+    config=security_config
+)
+
+app.state.guard_decorator = guard
 
 app.add_middleware(
     CORSMiddleware,

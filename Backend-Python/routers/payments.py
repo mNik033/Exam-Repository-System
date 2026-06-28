@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from config import settings
-from security import get_current_user
+from security import get_current_user, guard
 from models.user import User
 from repositories import user_repo, payment_repo
 
@@ -43,6 +43,7 @@ async def get_plans():
     ]
 
 @router.post("/makePayment")
+@guard.rate_limit(requests=10, window=60)
 async def make_payment(payload: MakePaymentRequest,current_user: User = Depends(get_current_user)):
     if payload.amount not in CREDIT_MAP:
         raise HTTPException(status_code=400, detail="Invalid payment amount")
@@ -75,6 +76,7 @@ async def make_payment(payload: MakePaymentRequest,current_user: User = Depends(
         return response.json()
 
 @router.post("/validatePayment")
+@guard.rate_limit(requests=10, window=60)
 async def validate_payment(
     payload: ValidatePaymentRequest,
     current_user: User = Depends(get_current_user)
@@ -116,6 +118,7 @@ async def validate_payment(
     return {"credit": new_credit}
 
 @router.post("/webhook")
+@guard.bypass(checks=["rate_limit"])
 async def razorpay_webhook(request: Request):
     signature = request.headers.get("X-Razorpay-Signature")
     if not signature:

@@ -10,7 +10,7 @@ from fastapi import APIRouter, File, UploadFile, Depends, BackgroundTasks, Reque
 from repositories import course_repo, paper_repo, question_repo, user_repo, upload_registry_repo
 from models.paper import Paper
 from models.user import User
-from security import get_current_user
+from security import get_current_user, guard
 from schemas.paper import (
     UploadPaperResponse,
     PaperDetailsResponse,
@@ -121,6 +121,8 @@ async def check_duplicate_and_lock(file_hash: str, user_id: str):
         )
 
 @router.post("/uploadPaper", status_code=status.HTTP_202_ACCEPTED, response_model=UploadPaperResponse)
+@guard.rate_limit(requests=5, window=60)
+@guard.max_request_size(MAX_FILE_SIZE)
 async def upload_paper(
     request: Request,
     background_tasks: BackgroundTasks,
