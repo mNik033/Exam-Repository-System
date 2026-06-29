@@ -274,13 +274,16 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
         if new_questions:
             new_texts = [item["question_text"] for item in new_questions]
             logger.info("Step 8: Generating answers for %d new questions...", len(new_texts))
-            answers = await gemini.generate_answers_parallel(
+            answers, failed_indices = await gemini.generate_answers_parallel(
                 ques_texts=new_texts,
                 file_uri=file_uri,
                 mime_type=mime_type,
                 cache_name=cache_name,
                 max_concurrent=MAX_API_CONCURRENCY
             )
+        
+            if failed_indices:
+                logger.warning(f"Note: Failed to generate answers for {len(failed_indices)} questions")
 
         # Step 9: save new questions to db
         if new_questions:

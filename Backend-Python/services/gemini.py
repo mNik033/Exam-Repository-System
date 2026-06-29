@@ -249,7 +249,7 @@ async def generate_single_answer(
             return "Answer generation succeeded but output schema was empty"
         except Exception as e:
             logger.error("API error generating answer for '%.30s...': %s", ques_text, e)
-            return f"Failed to generate answer due to an error: {e}"
+            raise Exception(e)
 
 async def generate_answers_parallel(
     ques_texts: list[str],
@@ -257,9 +257,9 @@ async def generate_answers_parallel(
     mime_type: str,
     cache_name: str | None = None,
     max_concurrent: int = 1,
-) -> list[str]:
+) -> tuple[list[str | None], list[int]]:
     if not ques_texts:
-        return []
+        return [], []
 
     logger.info(
         "Generating answers for %d questions (concurrency: %d) ...",
@@ -279,9 +279,19 @@ async def generate_answers_parallel(
         for ques_text in ques_texts
     ]
 
-    answers = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    succeeded = sum(1 for a in answers if not a.startswith("Failed"))
+    answers: list[str | None] = []
+    failed_indices: list[int] = []
+
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            answers.append(None)
+            failed_indices.append(i)
+        else:
+            answers.append(result)
+
+    succeeded = sum(1 for a in answers if a is not None)
     logger.info("Answer generation complete — %d/%d succeeded", succeeded, len(ques_texts))
 
-    return answers
+    return answers, failed_indices
