@@ -1,7 +1,9 @@
 import logging
 import asyncio
 import numpy as np
+import time
 
+from collections import deque
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
@@ -10,12 +12,50 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+# ── Rate Limiting ──────────────────────────────────────────────────
+
+class SlidingWindowRateLimiter:
+    def __init__(self, rpm: int, window_seconds: float = 60.0):
+        self.rpm = rpm
+        self.window = window_seconds
+        self.timestamps = deque()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        while True:
+            async with self._lock:
+                now = time.monotonic()
+                while self.timestamps and (now - self.timestamps[0]) >= self.window:
+                    self.timestamps.popleft()
+
+                if len(self.timestamps) < self.rpm:
+                    self.timestamps.append(now)
+                    return
+
+                wait_time = (self.timestamps[0] + self.window) - now
+            
+            logger.info("Rate limit reached (%d RPM). Waiting %.1fs...", self.rpm, wait_time)
+            await asyncio.sleep(wait_time + 0.1)
+            
+    def has_capacity(self) -> bool:
+        now = time.monotonic()
+        while self.timestamps and (now - self.timestamps[0]) >= self.window:
+            self.timestamps.popleft()
+        return len(self.timestamps) < self.rpm
+
+    def next_available_at(self) -> float:
+        if self.has_capacity():
+            return time.monotonic()
+        return self.timestamps[0] + self.window
+
+
 # ── Module Configuration ──────────────────────────────────────────────
 
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
 GEMINI_MODEL = "gemini-3.1-flash-lite"
 EMBEDDINGS_MODEL = "gemini-embedding-001"
 
+rate_limiter = SlidingWindowRateLimiter(rpm=15)
 
 # ── Prompt Templates ──────────────────────────────────────────────────
 
@@ -237,6 +277,7 @@ async def generate_single_answer(
             config.cached_content = cache_name
 
         try:
+            await rate_limiter.acquire()
             response = await client.aio.models.generate_content(
                 model=GEMINI_MODEL,
                 contents=contents,
