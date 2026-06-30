@@ -1,16 +1,28 @@
 import logging
 import asyncio
 import numpy as np
+import random
+import re
 import time
 
 from collections import deque
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
+from typing import Callable, Any, Coroutine
 
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+class  GeminiAPIError(Exception):
+    pass
+
+class DailyQuotaExhaustedError(GeminiAPIError):
+    pass
+
+class RetryExhaustedError(GeminiAPIError):
+    pass
 
 # ── Rate Limiting ──────────────────────────────────────────────────
 
@@ -203,8 +215,12 @@ async def extract_paper_data(
     if cache_name:
         config.cached_content = cache_name
 
-    response = await client.aio.models.generate_content(
-        model=GEMINI_MODEL, contents=contents, config=config
+    response = await _call_with_retry(
+        client.aio.models.generate_content,
+        rate_limiter,
+        model=GEMINI_MODEL,
+        contents=contents,
+        config=config
     )
 
     if response.parsed is None:
@@ -248,6 +264,65 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     return float(np.dot(a_arr, b_arr) / (norm_a * norm_b))
 
 
+# ── Retry and Backoff ────────────────────────────────────────────────
+
+MAX_RETRIES = 5
+BASE_DELAY = 2.0 # seconds
+
+def _classify_error(exception: Exception) -> str:
+    error_msg = str(exception)
+
+    if "503" in error_msg:
+        return "transient_503"
+
+    if "429" in error_msg:
+        if "GenerateRequestsPerDayPerProjectPerModel" in error_msg:
+            return "daily_exhausted"
+        if "GenerateRequestsPerMinutePerProjectPerModel" in error_msg:
+            return "transient_rpm"
+        return "transient_rpm"
+
+    return "fatal"
+
+def _parse_retry_delay(exception: Exception) -> float | None:
+    match = re.search(r"retryDelay.*?(\d+(?:\.\d+)?)s", str(exception))
+    return float(match.group(1)) if match else None
+    
+async def _call_with_retry(
+    api_call_fn: Callable[..., Coroutine[Any, Any, Any]],
+    limiter: SlidingWindowRateLimiter,
+    *args: Any,
+    **kwargs: Any
+) -> Any:
+    for attempt in range(1, MAX_RETRIES + 1):
+        await limiter.acquire()
+        try:
+            return await api_call_fn(*args, **kwargs)
+        except Exception as e:
+            classification = _classify_error(e)
+
+            if classification == "daily_exhausted":
+                raise DailyQuotaExhaustedError(f"Daily quota exhausted: {e}") from e
+
+            if classification == "fatal":
+                raise
+
+            if attempt == MAX_RETRIES:
+                raise RetryExhaustedError(f"Failed after {MAX_RETRIES} attempts: {e}") from e
+
+            wait = BASE_DELAY * (2 ** (attempt - 1))
+
+            if classification == "transient_rpm":
+                parsed = _parse_retry_delay(e)
+                if parsed:
+                    wait = max(wait, parsed)
+
+            wait += random.uniform(0.0, 1.0)
+
+            logger.warning("%s on attempt %d/%d. Waiting %.1fs...", classification, attempt, MAX_RETRIES, wait)
+            await asyncio.sleep(wait)
+
+
 # ── Answer Generation ─────────────────────────────────────────────────
 
 async def generate_single_answer(
@@ -277,8 +352,9 @@ async def generate_single_answer(
             config.cached_content = cache_name
 
         try:
-            await rate_limiter.acquire()
-            response = await client.aio.models.generate_content(
+            response = await _call_with_retry(
+                client.aio.models.generate_content,
+                rate_limiter,
                 model=GEMINI_MODEL,
                 contents=contents,
                 config=config
@@ -290,7 +366,7 @@ async def generate_single_answer(
             return "Answer generation succeeded but output schema was empty"
         except Exception as e:
             logger.error("API error generating answer for '%.30s...': %s", ques_text, e)
-            raise Exception(e)
+            raise
 
 async def generate_answers_parallel(
     ques_texts: list[str],
