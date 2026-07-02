@@ -6,6 +6,7 @@ import re
 import time
 
 from collections import deque
+from dataclasses import dataclass
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
@@ -15,7 +16,7 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-class  GeminiAPIError(Exception):
+class GeminiAPIError(Exception):
     pass
 
 class DailyQuotaExhaustedError(GeminiAPIError):
@@ -24,7 +25,7 @@ class DailyQuotaExhaustedError(GeminiAPIError):
 class RetryExhaustedError(GeminiAPIError):
     pass
 
-# ── Rate Limiting ──────────────────────────────────────────────────
+# ── Rate Limiting and API Key Pool ──────────────────────────────────────────────────
 
 class SlidingWindowRateLimiter:
     def __init__(self, rpm: int, window_seconds: float = 60.0):
@@ -61,13 +62,38 @@ class SlidingWindowRateLimiter:
         return self.timestamps[0] + self.window
 
 
+@dataclass
+class ApiContext:
+    api_key: str
+    client: genai.Client
+    rate_limiter: SlidingWindowRateLimiter
+
+class ApiKeyPool:
+    def __init__(self, api_keys: list[str], rpm_per_key: int = 15):
+        self.contexts = [
+            ApiContext(
+                api_key=key, 
+                client=genai.Client(api_key=key),
+                rate_limiter=SlidingWindowRateLimiter(rpm=rpm_per_key)
+            )
+            for key in api_keys
+        ]
+
+    def acquire(self) -> ApiContext:
+        def _last_used(entry: ApiContext) -> float:
+            if not entry.rate_limiter.timestamps:
+                return 0.0
+            return entry.rate_limiter.timestamps[-1]
+        
+        return min(self.contexts, key=_last_used)
+
+
 # ── Module Configuration ──────────────────────────────────────────────
 
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
 GEMINI_MODEL = "gemini-3.1-flash-lite"
 EMBEDDINGS_MODEL = "gemini-embedding-001"
 
-rate_limiter = SlidingWindowRateLimiter(rpm=15)
+api_key_pool = ApiKeyPool(api_keys=settings.gemini_api_key_list)
 
 # ── Prompt Templates ──────────────────────────────────────────────────
 
@@ -144,13 +170,13 @@ class AnswerExtraction(BaseModel):
 
 # ── File Management ──────────────────────────────────────────────────
 
-async def upload_file(file_path: str):
+async def upload_file(file_path: str, client: genai.Client):
     logger.info("Uploading file to Gemini: %s", file_path)
     upload_result = await client.aio.files.upload(file=file_path)
     logger.info("File uploaded — URI: %s, name: %s", upload_result.uri, upload_result.name)
     return upload_result
 
-async def delete_file(file_name: str) -> None:
+async def delete_file(file_name: str, client: genai.Client) -> None:
     try:
         await client.aio.files.delete(name=file_name)
         logger.info("Deleted Gemini file: %s", file_name)
@@ -160,7 +186,7 @@ async def delete_file(file_name: str) -> None:
 
 # ── Context Caching ──────────────────────────────────────────────────
 
-async def create_context_cache(file_uri: str, mime_type: str) -> str | None:
+async def create_context_cache(file_uri: str, mime_type: str, client: genai.Client) -> str | None:
     try:
         logger.info("Creating Context Cache for %s ...", file_uri)
         cache = await client.aio.caches.create(
@@ -181,7 +207,7 @@ async def create_context_cache(file_uri: str, mime_type: str) -> str | None:
         logger.warning("Failed to create Context Cache, fallback triggered: %s", e)
         return None
 
-async def delete_context_cache(cache_name: str) -> None:
+async def delete_context_cache(cache_name: str, client: genai.Client) -> None:
     try:
         await client.aio.caches.delete(name=cache_name)
         logger.info("Deleted Context Cache: %s", cache_name)
@@ -197,7 +223,11 @@ def _build_file_content(file_uri: str, mime_type: str) -> types.Content:
     )
 
 async def extract_paper_data(
-    file_uri: str, mime_type: str, cache_name: str | None = None
+    file_uri: str,
+    mime_type: str,
+    client: genai.Client,
+    limiter: SlidingWindowRateLimiter,
+    cache_name: str | None = None
 ) -> PaperExtraction:
     logger.info("Extracting paper metadata and questions ...")
 
@@ -217,7 +247,7 @@ async def extract_paper_data(
 
     response = await _call_with_retry(
         client.aio.models.generate_content,
-        rate_limiter,
+        limiter,
         model=GEMINI_MODEL,
         contents=contents,
         config=config
@@ -236,23 +266,23 @@ async def extract_paper_data(
 
 # ── Embedding & Semantic Search ──────────────────────────────────────
 
-async def generate_embeddings(texts: list[str]) -> list[list[float]]:
+async def generate_embeddings(texts: list[str], client: genai.Client) -> list[list[float]]:
     if not texts:
         return []
-    try:
-        logger.info("Generating vector embeddings for %d texts...", len(texts))
-        response = await client.aio.models.embed_content(
-            model=EMBEDDINGS_MODEL,
-            contents=texts,
-            config=types.EmbedContentConfig(output_dimensionality=768),
-        )
-        if not response.embeddings:
-            logger.warning("No embeddings returned via API")
-            return []
-        return [emb.values for emb in response.embeddings]
-    except Exception as e:
-        logger.error("Failed to generate embeddings: %s", e)
+    
+    logger.info("Generating vector embeddings for %d texts...", len(texts))
+    response = await _call_with_retry(
+        client.aio.models.embed_content,
+        None,
+        model=EMBEDDINGS_MODEL,
+        contents=texts,
+        config=types.EmbedContentConfig(output_dimensionality=768),
+    )
+
+    if not response.embeddings:
+        logger.warning("No embeddings returned via API")
         return []
+    return [emb.values for emb in response.embeddings]
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
     a_arr = np.array(a)
@@ -290,12 +320,14 @@ def _parse_retry_delay(exception: Exception) -> float | None:
     
 async def _call_with_retry(
     api_call_fn: Callable[..., Coroutine[Any, Any, Any]],
-    limiter: SlidingWindowRateLimiter,
+    limiter: SlidingWindowRateLimiter | None = None,
     *args: Any,
     **kwargs: Any
 ) -> Any:
     for attempt in range(1, MAX_RETRIES + 1):
-        await limiter.acquire()
+        if limiter:
+            await limiter.acquire()
+
         try:
             return await api_call_fn(*args, **kwargs)
         except Exception as e:
@@ -329,69 +361,65 @@ async def generate_single_answer(
     ques_text: str,
     file_uri: str,
     mime_type: str,
+    client: genai.Client,
+    limiter: SlidingWindowRateLimiter,
     cache_name: str | None = None,
-    semaphore: asyncio.Semaphore | None = None,
 ) -> str:
-    sem = semaphore if semaphore else asyncio.Semaphore(1)
+    logger.info("Generating answer for: %.60s ...", ques_text)
 
-    async with sem:
-        logger.info("Generating answer for: %.60s ...", ques_text)
+    contents: list = []
+    if not cache_name:
+        contents.append(_build_file_content(file_uri, mime_type))
+    contents.append(ANSWER_GENERATION_PROMPT.format(ques_text=ques_text))
 
-        contents: list = []
-        if not cache_name:
-            contents.append(_build_file_content(file_uri, mime_type))
-        contents.append(ANSWER_GENERATION_PROMPT.format(ques_text=ques_text))
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json",
+        response_schema=AnswerExtraction,
+        temperature=0.2,
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
+    )
 
-        config = types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=AnswerExtraction,
-            temperature=0.2,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
+    if cache_name:
+        config.cached_content = cache_name
+
+    try:
+        response = await _call_with_retry(
+            client.aio.models.generate_content,
+            limiter,
+            model=GEMINI_MODEL,
+            contents=contents,
+            config=config
         )
-        if cache_name:
-            config.cached_content = cache_name
 
-        try:
-            response = await _call_with_retry(
-                client.aio.models.generate_content,
-                rate_limiter,
-                model=GEMINI_MODEL,
-                contents=contents,
-                config=config
-            )
+        if response.parsed and response.parsed.answer:
+            return response.parsed.answer
 
-            if response.parsed and response.parsed.answer:
-                return response.parsed.answer
-
-            return "Answer generation succeeded but output schema was empty"
-        except Exception as e:
-            logger.error("API error generating answer for '%.30s...': %s", ques_text, e)
-            raise
+        raise ValueError("Answer generation succeeded but output schema was empty")
+    except Exception as e:
+        logger.error("API error generating answer for '%.30s...': %s", ques_text, e)
+        raise
 
 async def generate_answers_parallel(
     ques_texts: list[str],
     file_uri: str,
     mime_type: str,
+    client: genai.Client,
+    limiter: SlidingWindowRateLimiter,
     cache_name: str | None = None,
-    max_concurrent: int = 1,
 ) -> tuple[list[str | None], list[int]]:
     if not ques_texts:
         return [], []
 
-    logger.info(
-        "Generating answers for %d questions (concurrency: %d) ...",
-        len(ques_texts),
-        max_concurrent,
-    )
+    logger.info("Generating answers for %d questions...", len(ques_texts))
 
-    semaphore = asyncio.Semaphore(max_concurrent)
     tasks = [
         generate_single_answer(
             ques_text=ques_text,
             file_uri=file_uri,
             mime_type=mime_type,
+            client=client,
+            limiter=limiter,
             cache_name=cache_name,
-            semaphore=semaphore,
         )
         for ques_text in ques_texts
     ]
@@ -402,6 +430,8 @@ async def generate_answers_parallel(
     failed_indices: list[int] = []
 
     for i, result in enumerate(results):
+        if isinstance(result, DailyQuotaExhaustedError):
+            raise result
         if isinstance(result, Exception):
             answers.append(None)
             failed_indices.append(i)

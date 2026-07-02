@@ -6,11 +6,15 @@ class Settings(BaseSettings):
     JWT_SECRET: str
     PORT: int = 8001
     COURSES_JSON_PATH: str
-    GEMINI_API_KEY: str
+    GEMINI_API_KEYS: str
     RAZORPAY_KEY: str
     RAZORPAY_SECRET: str
     RAZORPAY_WEBHOOK_SECRET: str
     UNLOCK_COST: int = 5
+
+    @property
+    def gemini_api_key_list(self) -> list[str]:
+        return [k.strip() for k in self.GEMINI_API_KEYS.split(",") if k.strip()]
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

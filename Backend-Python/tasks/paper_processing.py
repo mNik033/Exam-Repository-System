@@ -4,6 +4,7 @@ import uuid
 import shutil
 import asyncio
 import mimetypes
+from google import genai
 
 from models.question import Question
 from repositories import paper_repo, question_repo, user_repo, course_repo, upload_registry_repo
@@ -12,7 +13,6 @@ from services import gemini
 logger = logging.getLogger(__name__)
 
 SIMILARITY_THRESHOLD = 0.85
-MAX_API_CONCURRENCY = 1
 
 
 # ── Helper Functions ──────────────────────────────────────────────────
@@ -46,8 +46,8 @@ def _is_extraction_valid(extracted_data) -> bool:
         return False
     return True
 
-async def _generate_embeddings(question_texts: list[str]) -> list[list[float]]:
-    embeddings = await gemini.generate_embeddings(question_texts)
+async def _generate_embeddings(question_texts: list[str], client: genai.Client) -> list[list[float]]:
+    embeddings = await gemini.generate_embeddings(question_texts, client)
     
     if not embeddings:
         raise Exception("Failed to generate embeddings")
@@ -125,20 +125,21 @@ async def _move_to_permanent_storage(file_path: str, target_name: str) -> str:
     return perm_path
 
 async def _cleanup_assets(
+    client: genai.Client,
     file_path: str,
     file_name: str | None = None,
     cache_name: str | None = None,
     remove_local: bool = True) -> None:
     # clean up Gemini API assets and local temp files
-    if cache_name:
+    if cache_name and client:
         try:
-            await gemini.delete_context_cache(cache_name)
+            await gemini.delete_context_cache(cache_name, client)
         except Exception as e:
             logger.error("Failed to delete context cache %s: %s", cache_name, e)
 
-    if file_name:
+    if file_name and client:
         try:
-            await gemini.delete_file(file_name)
+            await gemini.delete_file(file_name, client)
         except Exception as e:
             logger.error("Failed to delete Gemini file %s: %s", file_name, e)
 
@@ -186,6 +187,10 @@ async def _notify_subscribers(
 async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
     logger.info(f"Background task triggered for {file_path} uploaded by user {user_id}")
 
+    api_context = gemini.api_key_pool.acquire()
+    client = api_context.client
+    limiter = api_context.rate_limiter
+
     file_name = None
     cache_name = None
 
@@ -197,17 +202,17 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
         
         # Step 1. upload to Gemini File API
         logger.info("Step 1. Uploading paper to Gemini...")
-        upload_result = await gemini.upload_file(file_path)
+        upload_result = await gemini.upload_file(file_path, client)
         file_uri = upload_result.uri
         file_name = upload_result.name
 
         # Step 1.5 create Context Cache
         logger.info("Step 1.5: Creating Context Cache...")
-        cache_name = await gemini.create_context_cache(file_uri, mime_type)
+        cache_name = await gemini.create_context_cache(file_uri, mime_type, client)
 
         # Step 2: extract metadata and questions
         logger.info("Step 2: Extracting paper data...")
-        extracted_data = await gemini.extract_paper_data(file_uri, mime_type, cache_name)
+        extracted_data = await gemini.extract_paper_data(file_uri, mime_type, client, limiter, cache_name)
 
         # Step 3: validate extraction
         if not _is_extraction_valid(extracted_data):
@@ -218,7 +223,7 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
                 message="We couldn't process your uploaded paper. It may be unreadable or not a valid exam paper.",
                 type="error"
             )
-            await _cleanup_assets(file_path, file_name, cache_name)
+            await _cleanup_assets(client, file_path, file_name, cache_name)
             return
 
         # Step 4: resolve course
@@ -232,7 +237,7 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
                 message=f"Paper rejected: we couldn't match '{extracted_data.course.code}' to a supported course.",
                 type="error"
             )
-            await _cleanup_assets(file_path, file_name, cache_name)
+            await _cleanup_assets(client, file_path, file_name, cache_name)
             return
 
         # Step 5: check duplicate paper
@@ -253,13 +258,13 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
                 type="info",
                 paper_id=duplicate_paper_id
             )
-            await _cleanup_assets(file_path, file_name, cache_name)
+            await _cleanup_assets(client, file_path, file_name, cache_name)
             return
 
         # Step 6: batch-embed question texts
         logger.info("Step 6: Generating embeddings for %d questions...", len(extracted_data.questions))
         question_texts = [q.question for q in extracted_data.questions]
-        embeddings = await _generate_embeddings(question_texts)
+        embeddings = await _generate_embeddings(question_texts, client)
 
         # Step 7: two-tier deduplication
         logger.info("Step 7: Running deduplication (threshold=%.2f)...", SIMILARITY_THRESHOLD)
@@ -278,12 +283,13 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
                 ques_texts=new_texts,
                 file_uri=file_uri,
                 mime_type=mime_type,
-                cache_name=cache_name,
-                max_concurrent=MAX_API_CONCURRENCY
+                client=client,
+                limiter=limiter,
+                cache_name=cache_name
             )
         
             if failed_indices:
-                logger.warning(f"Note: Failed to generate answers for {len(failed_indices)} questions")
+                raise Exception(f"Failed to generate answers for {len(failed_indices)} questions.")
 
         # Step 9: save new questions to db
         if new_questions:
@@ -337,7 +343,7 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
                 paper_id=paper_id
             )
         
-        await _cleanup_assets(file_path, file_name, cache_name, False)
+        await _cleanup_assets(client, file_path, file_name, cache_name, False)
         logger.info("Processing complete: %s", paper_title)
     
     except Exception as e:
@@ -355,4 +361,4 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
         except Exception as notify_err:
             logger.error("Failed to notify user: %s", notify_err)
         
-        await _cleanup_assets(file_path, file_name, cache_name, True)
+        await _cleanup_assets(client, file_path, file_name, cache_name, True)
