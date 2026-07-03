@@ -342,12 +342,10 @@ async def _call_with_retry(
             if attempt == MAX_RETRIES:
                 raise RetryExhaustedError(f"Failed after {MAX_RETRIES} attempts: {e}") from e
 
-            wait = BASE_DELAY * (2 ** (attempt - 1))
-
-            if classification == "transient_rpm":
-                parsed = _parse_retry_delay(e)
-                if parsed:
-                    wait = max(wait, parsed)
+            if classification == "transient_rpm" and (parsed := _parse_retry_delay(e)):
+                wait = parsed
+            else:
+                wait = BASE_DELAY * (2 ** (attempt - 1))
 
             wait += random.uniform(0.0, 1.0)
 
