@@ -91,7 +91,9 @@ async def start_background_upgrade_task(interval_seconds: int):
     
     while True:
         try:
-            await run_upgrade_batch()
+            await asyncio.wait_for(run_upgrade_batch(), timeout=900)
+        except asyncio.TimeoutError:
+            logger.error("Background upgrade batch timed out after 15 minutes.")
         except Exception as e:
             logger.error(f"Unexpected error in background upgrade task: {e}")
         

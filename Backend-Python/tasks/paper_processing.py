@@ -381,7 +381,15 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
             break
             
         try:
-            await _run_paper_pipeline(file_path, file_hash, user_id, api_context)
+            await asyncio.wait_for(
+                _run_paper_pipeline(file_path, file_hash, user_id, api_context), timeout=240
+            )
+            return
+        except asyncio.TimeoutError:
+            logger.error(f"Paper processing timed out after 4 minutes for: {file_path}")
+            await _notify_and_fail_paper(
+                file_hash, user_id, file_path, "Paper processing timed out. Please try again."
+            )
             return
         except gemini.DailyQuotaExhaustedError:
             gemini.api_key_pool.mark_exhausted(api_context)
