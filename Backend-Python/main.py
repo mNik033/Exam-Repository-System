@@ -18,6 +18,7 @@ from routers.payments import router as payments_router
 from repositories.question_repo import ensure_text_index
 
 from tasks.paper_processing import process_uploaded_paper_task
+from tasks import upgrade_answers_task
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,11 @@ async def lifespan(app: FastAPI):
     await client.admin.command('ping')
     print("Connnected to DB")
 
+    # try upgrading answers to a better model
+    upgrade_task = asyncio.create_task(
+        upgrade_answers_task.start_background_upgrade_task(interval_seconds=21600)
+    )
+
     # ensure MongoDB text index on question_text
     await ensure_text_index()
 
@@ -34,6 +40,8 @@ async def lifespan(app: FastAPI):
     await scan_and_process_pending_papers()
 
     yield
+
+    upgrade_task.cancel()
 
     client.close()
     print("Connnected closed")

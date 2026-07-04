@@ -79,7 +79,8 @@ async def create_paper(
     session: str,
     session_year: str,
     exam_type: str,
-    question_ids: list[str]
+    question_ids: list[str],
+    processing_model: int,
 ) -> str:
     paper_doc = {
         "title": title,
@@ -90,6 +91,7 @@ async def create_paper(
         "session_year": session_year,
         "exam_type": exam_type,
         "question_ids": question_ids,
+        "processing_model": processing_model,
         "created_at": datetime.utcnow()
     }
     result = await papers.insert_one(paper_doc)
@@ -102,3 +104,25 @@ async def delete_paper(paper_id: str) -> bool:
         os.remove(paper.file_path)
     result = await papers.delete_one({"_id": ObjectId(paper_id)})
     return result.deleted_count > 0
+
+async def get_papers_pending_upgrade(target_model: int, limit: int = 5) -> list[Paper]:
+    # find papers that have not been upgraded to the target model yet
+    cursor = papers.find({
+        "$or": [
+            {"processing_model": {"$exists": False}},
+            {"processing_model": {"$lt": target_model}}
+        ]
+    }).limit(limit)
+
+    results = []
+    async for doc in cursor:
+        doc["_id"] = str(doc["_id"])
+        results.append(Paper(**doc))
+    return results
+
+async def mark_paper_upgraded(paper_id: str, new_model: int) -> bool:
+    result = await papers.update_one(
+        {"_id": ObjectId(paper_id)},
+        {"$set": {"processing_model": new_model}}
+    )
+    return result.modified_count > 0

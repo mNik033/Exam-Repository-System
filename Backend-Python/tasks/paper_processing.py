@@ -13,12 +13,14 @@ from services import gemini
 logger = logging.getLogger(__name__)
 
 SIMILARITY_THRESHOLD = 0.85
+DEFAULT_ANSWER_MODEL = 1
+DEFAULT_EMBEDDING_MODEL = 1
 
 
 # ── Helper Functions ──────────────────────────────────────────────────
 
 
-def _get_mime_type(file_path: str) -> str:
+def get_mime_type(file_path: str) -> str:
     mime_type, _ = mimetypes.guess_type(file_path)
     if mime_type:
         return mime_type
@@ -203,7 +205,7 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
     cache_name = None
 
     try:
-        mime_type = _get_mime_type(file_path)
+        mime_type = get_mime_type(file_path)
         
         # Step 1. upload to Gemini File API
         logger.info("Step 1. Uploading paper to Gemini...")
@@ -213,11 +215,15 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
 
         # Step 1.5 create Context Cache
         logger.info("Step 1.5: Creating Context Cache...")
-        cache_name = await gemini.create_context_cache(file_uri, mime_type, client)
+        cache_name = await gemini.create_context_cache(
+            file_uri, mime_type, client, DEFAULT_ANSWER_MODEL
+        )
 
         # Step 2: extract metadata and questions
         logger.info("Step 2: Extracting paper data...")
-        extracted_data = await gemini.extract_paper_data(file_uri, mime_type, client, limiter, cache_name)
+        extracted_data = await gemini.extract_paper_data(
+            file_uri, mime_type, client, limiter, cache_name, DEFAULT_ANSWER_MODEL
+        )
 
         # Step 3: validate extraction
         if not _is_extraction_valid(extracted_data):
@@ -290,7 +296,8 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
                 mime_type=mime_type,
                 client=client,
                 limiter=limiter,
-                cache_name=cache_name
+                cache_name=cache_name,
+                target_model=DEFAULT_ANSWER_MODEL,
             )
         
             if failed_indices:
@@ -305,7 +312,9 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
                     answer_text=answers[idx],
                     tag=item["tag"],
                     course_id=course.id,
-                    embedding=item["embedding"]
+                    embedding=item["embedding"],
+                    answer_model=DEFAULT_ANSWER_MODEL,
+                    embedding_model=DEFAULT_EMBEDDING_MODEL
                 )
                 for idx, item in enumerate(new_questions)
             ]
@@ -327,7 +336,8 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
             session=extracted_data.session,
             session_year=extracted_data.sessionYear,
             exam_type=extracted_data.examType,
-            question_ids=question_ids
+            question_ids=question_ids,
+            processing_model=DEFAULT_ANSWER_MODEL
         )
         logger.info("Paper created: %s (id=%s)", paper_title, paper_id)
 

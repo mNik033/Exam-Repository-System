@@ -65,3 +65,12 @@ async def create_questions_bulk(questions_list: list[Question]) -> list[str]:
 async def count_for_course(course_id: str) -> int:
     return await questions.count_documents({"course_id": course_id})
     
+async def update_question_answer(question_id: str, new_answer: str, new_model: int) -> bool:
+    result = await questions.update_one(
+        {"_id": ObjectId(question_id)},
+        {"$set": {
+            "answer_text": new_answer,
+            "answer_model": new_model
+        }}
+    )
+    return result.modified_count > 0

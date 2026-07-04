@@ -101,7 +101,10 @@ class ApiKeyPool:
 
 # ── Module Configuration ──────────────────────────────────────────────
 
-GEMINI_MODEL = "gemini-3.1-flash-lite"
+ANSWER_MODELS = {
+    1: "gemini-3.1-flash-lite",
+    2: "gemini-3.5-flash"
+}
 EMBEDDINGS_MODEL = "gemini-embedding-001"
 
 api_key_pool = ApiKeyPool(api_keys=settings.gemini_api_key_list)
@@ -197,11 +200,13 @@ async def delete_file(file_name: str, client: genai.Client) -> None:
 
 # ── Context Caching ──────────────────────────────────────────────────
 
-async def create_context_cache(file_uri: str, mime_type: str, client: genai.Client) -> str | None:
+async def create_context_cache(
+    file_uri: str, mime_type: str, client: genai.Client, target_model: int = 1
+) -> str | None:
     try:
         logger.info("Creating Context Cache for %s ...", file_uri)
         cache = await client.aio.caches.create(
-            model=f"models/{GEMINI_MODEL}",
+            model=f"models/{ANSWER_MODELS[target_model]}",
             config=types.CreateCachedContentConfig(
                 contents=[
                     types.Content(
@@ -238,7 +243,8 @@ async def extract_paper_data(
     mime_type: str,
     client: genai.Client,
     limiter: SlidingWindowRateLimiter,
-    cache_name: str | None = None
+    cache_name: str | None = None,
+    target_model: int = 1,
 ) -> PaperExtraction:
     logger.info("Extracting paper metadata and questions ...")
 
@@ -259,7 +265,7 @@ async def extract_paper_data(
     response = await _call_with_retry(
         client.aio.models.generate_content,
         limiter,
-        model=GEMINI_MODEL,
+        model=ANSWER_MODELS[target_model],
         contents=contents,
         config=config
     )
@@ -373,6 +379,7 @@ async def generate_single_answer(
     client: genai.Client,
     limiter: SlidingWindowRateLimiter,
     cache_name: str | None = None,
+    target_model: int = 1,
 ) -> str:
     logger.info("Generating answer for: %.60s ...", ques_text)
 
@@ -395,7 +402,7 @@ async def generate_single_answer(
         response = await _call_with_retry(
             client.aio.models.generate_content,
             limiter,
-            model=GEMINI_MODEL,
+            model=ANSWER_MODELS[target_model],
             contents=contents,
             config=config
         )
@@ -415,6 +422,7 @@ async def generate_answers_parallel(
     client: genai.Client,
     limiter: SlidingWindowRateLimiter,
     cache_name: str | None = None,
+    target_model: int = 1,
 ) -> tuple[list[str | None], list[int]]:
     if not ques_texts:
         return [], []
@@ -429,6 +437,7 @@ async def generate_answers_parallel(
             client=client,
             limiter=limiter,
             cache_name=cache_name,
+            target_model=target_model,
         )
         for ques_text in ques_texts
     ]
