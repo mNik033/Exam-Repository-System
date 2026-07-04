@@ -3,8 +3,9 @@ from bson import ObjectId
 from database import questions
 from models.question import Question
 
-async def ensure_text_index() -> None:
+async def ensure_indexes() -> None:
     await questions.create_index([("question_text", "text")])
+    await questions.create_index([("course_id", 1), ("question_text", 1)])
 
 async def get_questions(projection: dict | None = None) -> list[dict]:
     cursor = questions.find({}, projection)

@@ -15,7 +15,7 @@ from routers.users import router as users_router
 from routers.courses import router as courses_router
 from routers.papers import router as papers_router
 from routers.payments import router as payments_router
-from repositories.question_repo import ensure_text_index
+from repositories.question_repo import ensure_indexes
 
 from tasks.paper_processing import process_uploaded_paper_task
 from tasks import upgrade_answers_task
@@ -33,8 +33,8 @@ async def lifespan(app: FastAPI):
         upgrade_answers_task.start_background_upgrade_task(interval_seconds=21600)
     )
 
-    # ensure MongoDB text index on question_text
-    await ensure_text_index()
+    # ensure MongoDB text index on questions collection
+    await ensure_indexes()
 
     # scan for and process pending files
     await scan_and_process_pending_papers()
