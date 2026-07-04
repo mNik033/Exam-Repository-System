@@ -183,19 +183,24 @@ async def _notify_subscribers(
 
 # ── Core Task ─────────────────────────────────────────────────────────
 
+async def _notify_and_fail_paper(file_hash: str, user_id: str, file_path: str, message: str) -> None:
+    try:
+        subscribers = [user_id]
+        db_subs = await upload_registry_repo.delete_record(file_hash)
+        if db_subs:
+            subscribers = db_subs
+        await _notify_subscribers(subscribers=subscribers, message=message, type="error")
+    except Exception as e:
+        logger.error("Failed to notify user: %s", e)
+    if os.path.exists(file_path):
+        os.remove(file_path)
 
-async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
-    logger.info(f"Background task triggered for {file_path} uploaded by user {user_id}")
-
-    api_context = gemini.api_key_pool.acquire()
+async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_context: gemini.ApiContext) -> None:
     client = api_context.client
     limiter = api_context.rate_limiter
 
     file_name = None
     cache_name = None
-
-    local_filename = os.path.basename(file_path)
-    file_hash = local_filename.split("_")[3]
 
     try:
         mime_type = _get_mime_type(file_path)
@@ -346,19 +351,34 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
         await _cleanup_assets(client, file_path, file_name, cache_name, False)
         logger.info("Processing complete: %s", paper_title)
     
+    except gemini.DailyQuotaExhaustedError:
+        await _cleanup_assets(client, file_path, file_name, cache_name, False)
+        raise
     except Exception as e:
         logger.error("Paper processing failed: %s", e, exc_info=True)
+        await _cleanup_assets(client, file_path, file_name, cache_name, False)
+        raise
+
+async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
+    logger.info(f"Background task triggered for {file_path} uploaded by user {user_id}")
+    local_filename = os.path.basename(file_path)
+    file_hash = local_filename.split("_")[3]
+
+    for _ in range(len(gemini.api_key_pool.contexts)):
         try:
-            subscribers = [user_id]
-            db_subs = await upload_registry_repo.delete_record(file_hash)
-            if db_subs:
-                subscribers = db_subs
-            await _notify_subscribers(
-                subscribers=subscribers,
-                message="An error occurred while processing your paper. Please try again later.",
-                type="error"
-            )
-        except Exception as notify_err:
-            logger.error("Failed to notify user: %s", notify_err)
-        
-        await _cleanup_assets(client, file_path, file_name, cache_name, True)
+            api_context = gemini.api_key_pool.acquire()
+        except gemini.AllKeysExhaustedError:
+            break
+            
+        try:
+            await _run_paper_pipeline(file_path, file_hash, user_id, api_context)
+            return
+        except gemini.DailyQuotaExhaustedError:
+            gemini.api_key_pool.mark_exhausted(api_context)
+            continue
+        except Exception:
+            await _notify_and_fail_paper(file_hash, user_id, file_path, "An error occurred while processing your paper. Please try again later.")
+            return
+
+    logger.error("Paper processing failed: All keys exhausted")
+    await _notify_and_fail_paper(file_hash, user_id, file_path, "Our daily processing capacity has been reached. Please re-upload your paper tomorrow.")

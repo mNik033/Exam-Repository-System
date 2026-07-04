@@ -25,6 +25,9 @@ class DailyQuotaExhaustedError(GeminiAPIError):
 class RetryExhaustedError(GeminiAPIError):
     pass
 
+class AllKeysExhaustedError(GeminiAPIError):
+    pass
+
 # ── Rate Limiting and API Key Pool ──────────────────────────────────────────────────
 
 class SlidingWindowRateLimiter:
@@ -85,7 +88,15 @@ class ApiKeyPool:
                 return 0.0
             return entry.rate_limiter.timestamps[-1]
         
-        return min(self.contexts, key=_last_used)
+        best = min(self.contexts, key=_last_used)
+        # the "most rested" key is in the future -> all keys exhausted
+        if best.rate_limiter.timestamps and best.rate_limiter.timestamps[-1] > time.monotonic():
+            raise AllKeysExhaustedError("All API keys are currently exhausted")
+        return best
+    
+    def mark_exhausted(self, ctx: ApiContext):
+        # push key 1 hour into the future so it's deprioritized
+        ctx.rate_limiter.timestamps.append(time.monotonic() + 3600)
 
 
 # ── Module Configuration ──────────────────────────────────────────────
