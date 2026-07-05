@@ -107,8 +107,9 @@ export async function getCourses() {
 
 // ===== Papers =====
 
-export async function getPapers() {
-  return request("/api/getPapers");
+export async function getPapers(cursor = null) {
+  const url = cursor ? `/api/getPapers?cursor=${encodeURIComponent(cursor)}` : "/api/getPapers";
+  return request(url);
 }
 
 export async function getPaperDetails(paperId, token) {

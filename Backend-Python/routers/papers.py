@@ -8,7 +8,7 @@ from bson import ObjectId
 from fastapi import APIRouter, File, UploadFile, Depends, BackgroundTasks, Request, status, HTTPException
 
 from repositories import course_repo, paper_repo, question_repo, user_repo, upload_registry_repo
-from models.paper import Paper
+from models.paper import Paper, PaginatedPaperResponse
 from models.user import User
 from security import get_current_user, guard
 from schemas.paper import (
@@ -42,9 +42,11 @@ async def _read_file_with_size_limit(file: UploadFile, max_size: int = MAX_FILE_
     
     return bytes(file_bytes)
 
-@router.get("/getPapers", response_model=list[Paper])
-async def get_papers():
-    return await paper_repo.get_all_papers()
+@router.get("/getPapers", response_model=PaginatedPaperResponse)
+async def get_papers(cursor: str | None = None, limit: int = 10):
+    limit = min(limit, 50)
+    papers_list, next_cursor = await paper_repo.get_all_papers(cursor, limit)
+    return PaginatedPaperResponse(papers=papers_list, next_cursor=next_cursor)
 
 @router.get("/myPapers", response_model=list[Paper])
 async def get_my_papers(current_user: User = Depends(get_current_user)):

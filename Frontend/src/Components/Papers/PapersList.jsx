@@ -11,15 +11,35 @@ export default function PapersList() {
   const auth = useContext(AuthContext);
   const navigate = useNavigate();
   const [papers, setPapers] = useState([]);
+  const [cursor, setCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     getPapers()
-      .then((data) => setPapers(data || []))
+      .then((data) => {
+        setPapers(data.papers || []);
+        setCursor(data.next_cursor || null);
+        setHasMore(!!data.next_cursor);
+      })
       .catch(() => setPapers([]))
       .finally(() => setLoading(false));
   }, []);
+
+  const loadMore = () => {
+    if (!cursor || loadingMore) return;
+    setLoadingMore(true);
+    getPapers(cursor)
+      .then((data) => {
+        setPapers((prev) => [...prev, ...(data.papers || [])]);
+        setCursor(data.next_cursor || null);
+        setHasMore(!!data.next_cursor);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingMore(false));
+  };
 
   const handlePaperClick = (paper) => {
     if (auth.token && paper.course_id) {
@@ -111,6 +131,18 @@ export default function PapersList() {
                 </div>
               </div>
             ))}
+            
+            {hasMore && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '24px' }}>
+                <button
+                  className="btn-outlined"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? "Loading..." : "Load More"}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

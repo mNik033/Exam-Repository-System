@@ -56,8 +56,8 @@ export default function QuestionList() {
     } else {
       // Fetch all papers and courses for the list view
       Promise.all([getPapers(), getCourses()])
-        .then(([papersData, coursesData]) => {
-          const populated = (papersData || []).map((paper) => {
+        .then(([papersResp, coursesData]) => {
+          const populated = (papersResp.papers || []).map((paper) => {
             const course = (coursesData || []).find(
               (c) => c._id === paper.course_id || c.id === paper.course_id
             );

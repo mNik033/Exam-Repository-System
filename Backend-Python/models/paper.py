@@ -14,3 +14,6 @@ class Paper(BaseModel):
     processing_model: int = 1
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
+class PaginatedPaperResponse(BaseModel):
+    papers: list[Paper]
+    next_cursor: str | None = None

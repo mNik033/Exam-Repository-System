@@ -1,3 +1,4 @@
+import base64
 import os
 from datetime import datetime
 from bson import ObjectId
@@ -5,13 +6,46 @@ from bson import ObjectId
 from database import papers
 from models.paper import Paper
 
-async def get_all_papers() -> list[Paper]:
-    cursor = papers.find().sort("session_year", -1)
+def _decode_cursor(cursor_str: str) -> tuple[str, str] | None:
+    try:
+        decoded = base64.b64decode(cursor_str.encode()).decode()
+        session_year, obj_id = decoded.split("_", 1)
+        return session_year, obj_id
+    except Exception:
+        return None
+
+def _encode_cursor(session_year: str, obj_id: str) -> str:
+    token = f"{session_year}_{obj_id}"
+    return base64.b64encode(token.encode()).decode()
+
+async def get_all_papers(cursor: str | None = None, limit: int = 10) -> tuple[list[Paper], str | None]:
+    query = {}
+
+    if cursor:
+        decoded = _decode_cursor(cursor)
+        if decoded:
+            last_year, last_id = decoded
+            query = {
+                "$or": [
+                    {"session_year": {"$lt": last_year}},
+                    {"session_year": last_year, "_id": {"$lt": ObjectId(last_id)}}
+                ]
+            }
+
+    db_cursor = papers.find(query).sort([("session_year", -1), ("_id", -1)]).limit(limit + 1)
+
     results = []
-    async for doc in cursor:
+    async for doc in db_cursor:
         doc["_id"] = str(doc["_id"])
         results.append(Paper(**doc))
-    return results
+    
+    next_cursor = None
+    if len(results) > limit:
+        results.pop()
+        last_item = results[-1]
+        next_cursor = _encode_cursor(last_item.session_year, last_item.id)
+    
+    return results, next_cursor
 
 async def get_paper_by_id(paper_id: str) -> Paper | None:
     doc = await papers.find_one({"_id": ObjectId(paper_id)})
