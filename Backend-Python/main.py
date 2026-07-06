@@ -1,4 +1,3 @@
-import os
 import asyncio
 import logging
 from contextlib import asynccontextmanager
@@ -6,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from guard.middleware import SecurityMiddleware
+from pathlib import Path
 
 from config import settings
 from database import client
@@ -16,6 +16,7 @@ from routers.courses import router as courses_router
 from routers.papers import router as papers_router
 from routers.payments import router as payments_router
 from repositories.question_repo import ensure_indexes
+from services.storage import storage
 
 from tasks.paper_processing import process_uploaded_paper_task
 from tasks import upgrade_answers_task
@@ -67,7 +68,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.include_router(users_router)
@@ -86,14 +86,15 @@ async def get_config():
     }
 
 async def scan_and_process_pending_papers():
-    pending_prefix = "pending_"
-    pending_files = [f for f in os.listdir('uploads') if f.startswith(pending_prefix)]
-
+    pending_prefix = "pending/"
+    pending_files = await storage.list_files(prefix=pending_prefix)
+    
     for file in pending_files:
-        file_path = os.path.join('uploads', file)
+        filename = Path(file).name
         try:
-            user_id = file.split('_')[1]
-            asyncio.create_task(process_uploaded_paper_task(file_path, user_id))
+            parts = filename.split('_', 3)
+            user_id = parts[1]
+            asyncio.create_task(process_uploaded_paper_task(file, user_id))
         except Exception as e:
-            logger.error(f"Failed to process {file_path}: {str(e)}")
+            logger.error(f"Failed to process {file}: {str(e)}")
 

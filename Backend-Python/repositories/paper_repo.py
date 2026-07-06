@@ -1,10 +1,11 @@
 import base64
-import os
 from datetime import datetime
 from bson import ObjectId
+from pathlib import Path
 
 from database import papers
 from models.paper import Paper
+from services import storage
 
 def _decode_cursor(cursor_str: str) -> tuple[str, str] | None:
     try:
@@ -134,8 +135,7 @@ async def create_paper(
 async def delete_paper(paper_id: str) -> bool:
     # delete the file as well from uploads directory
     paper = await get_paper_by_id(paper_id)
-    if paper and os.path.exists(paper.file_path):
-        os.remove(paper.file_path)
+    await storage.delete_file(paper.file_path)
     result = await papers.delete_one({"_id": ObjectId(paper_id)})
     return result.deleted_count > 0
 

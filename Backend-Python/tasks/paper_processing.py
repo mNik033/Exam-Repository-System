@@ -1,14 +1,14 @@
 import logging
-import os
 import uuid
 import shutil
 import asyncio
 import mimetypes
 from google import genai
+from pathlib import Path
 
 from models.question import Question
 from repositories import paper_repo, question_repo, user_repo, course_repo, upload_registry_repo
-from services import gemini
+from services import gemini, storage
 
 logger = logging.getLogger(__name__)
 
@@ -118,10 +118,7 @@ async def _move_to_permanent_storage(file_path: str, target_name: str) -> str:
     # move temp upload to permanent storage and return new path
     file_extension = file_path.split(".")[-1]
     perm_filename = f"{target_name}.{file_extension}"
-    perm_path = os.path.join("uploads", perm_filename)
-
-    os.makedirs(os.path.dirname(perm_path), exist_ok=True)
-    shutil.move(file_path, perm_path)
+    perm_path = await storage.move_file(file_path, perm_filename)
     logger.info("Moved file to permanent storage: %s", perm_path)
     
     return perm_path
@@ -145,9 +142,9 @@ async def _cleanup_assets(
         except Exception as e:
             logger.error("Failed to delete Gemini file %s: %s", file_name, e)
 
-    if remove_local and os.path.exists(file_path):
+    if remove_local:
         try:
-            os.remove(file_path)
+            await storage.delete_file(file_path)
             logger.info("Removed temp file: %s", file_path)
         except Exception as e:
             logger.error("Failed to remove temp file %s: %s", file_path, e)
@@ -194,8 +191,7 @@ async def _notify_and_fail_paper(file_hash: str, user_id: str, file_path: str, m
         await _notify_subscribers(subscribers=subscribers, message=message, type="error")
     except Exception as e:
         logger.error("Failed to notify user: %s", e)
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    await storage.delete_file(file_path)
 
 async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_context: gemini.ApiContext) -> None:
     client = api_context.client
@@ -209,7 +205,7 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
         
         # Step 1. upload to Gemini File API
         logger.info("Step 1. Uploading paper to Gemini...")
-        upload_result = await gemini.upload_file(file_path, client)
+        upload_result = await gemini.upload_file(storage.get_path(file_path), client)
         file_uri = upload_result.uri
         file_name = upload_result.name
 
@@ -325,12 +321,12 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
 
         # Step 10: move file and save paper
         target_name = f"{course.code}_{extracted_data.sessionYear}_{extracted_data.session}_{extracted_data.examType}".replace(" ", "_").replace("/", "-")
-        perm_path = await _move_to_permanent_storage(file_path, target_name)
+        perm_key = await _move_to_permanent_storage(file_path, target_name)
         paper_title = f"[{course.code}] {course.name} - {extracted_data.examType} ({extracted_data.session} {extracted_data.sessionYear})"
 
         paper_id = await paper_repo.create_paper(
             title=paper_title,
-            file_path=perm_path,
+            file_path=perm_key,
             course_id=course.id,
             uploaded_by=user_id,
             session=extracted_data.session,
@@ -371,8 +367,8 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
 
 async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
     logger.info(f"Background task triggered for {file_path} uploaded by user {user_id}")
-    local_filename = os.path.basename(file_path)
-    file_hash = local_filename.split("_")[3]
+    local_filename = Path(file_path).name
+    file_hash = local_filename.split("_")[2]
 
     for _ in range(len(gemini.api_key_pool.contexts)):
         try:

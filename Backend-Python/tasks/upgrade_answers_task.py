@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from repositories import paper_repo, question_repo
-from services import gemini
+from services import gemini, storage
 from tasks import paper_processing
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ async def run_upgrade_batch():
         cache_name = None
 
         try:
-            upload_result = await gemini.upload_file(paper.file_path, client)
+            upload_result = await gemini.upload_file(storage.get_path(paper.file_path), client)
             file_name = upload_result.name
 
             cache_name = await gemini.create_context_cache(

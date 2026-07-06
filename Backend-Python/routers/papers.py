@@ -1,16 +1,17 @@
 import blake3
-import os
 import shutil
 import time
 import uuid
 from datetime import datetime
 from bson import ObjectId
 from fastapi import APIRouter, File, UploadFile, Depends, BackgroundTasks, Request, status, HTTPException
+from pathlib import Path
 
 from repositories import course_repo, paper_repo, question_repo, user_repo, upload_registry_repo
 from models.paper import Paper, PaginatedPaperResponse
 from models.user import User
 from security import get_current_user, guard
+from services.storage import storage
 from schemas.paper import (
     UploadPaperResponse,
     PaperDetailsResponse,
@@ -46,30 +47,33 @@ async def _read_file_with_size_limit(file: UploadFile, max_size: int = MAX_FILE_
 async def get_papers(cursor: str | None = None, limit: int = 10):
     limit = min(limit, 50)
     papers_list, next_cursor = await paper_repo.get_all_papers(cursor, limit)
+    for paper in papers_list:
+        paper.file_path = storage.get_url(paper.file_path)
     return PaginatedPaperResponse(papers=papers_list, next_cursor=next_cursor)
 
 @router.get("/myPapers", response_model=list[Paper])
 async def get_my_papers(current_user: User = Depends(get_current_user)):
     # fetch processed papers from database
     papers_list = await paper_repo.list_by_user(current_user.id)
+    for paper in papers_list:
+        paper.file_path = storage.get_url(paper.file_path)
 
     # check for active pending files in uploads folder
-    uploads_dir = "uploads"
     pending_papers = []
-    if os.path.exists(uploads_dir):
-        for filename in os.listdir(uploads_dir):
-            if filename.startswith("pending_"):
-                parts = filename.split("_", 4)
-                
-                # parts format: ["pending", timestamp, user_id, uuid, safe_filename]
-                if len(parts) > 2 and parts[2] == current_user.id:
-                    original_name = parts[4] if len(parts) > 4 else "Uploaded Document"
-                    filepath = os.path.join(uploads_dir, filename)
-                    
-                    try:
-                        created_at = datetime.fromtimestamp(int(parts[1]))
-                    except (ValueError, IndexError):
-                        created_at = datetime.utcnow()
+    pending_files = await storage.list_files(prefix="pending/")
+    for file in pending_files:
+        filename = Path(file).name
+        parts = filename.split("_", 3)
+        
+        # parts format: [timestamp, user_id, uuid, safe_filename]
+        if len(parts) > 1 and parts[1] == current_user.id:
+            original_name = parts[3] if len(parts) > 3 else "Uploaded Document"
+            filepath = storage.get_url(file)
+            
+            try:
+                created_at = datetime.fromtimestamp(int(parts[0]))
+            except (ValueError, IndexError):
+                created_at = datetime.utcnow()
                 
                 pending_papers.append(
                     Paper(
@@ -173,14 +177,12 @@ async def upload_paper(
         safe_filename = f"{base_name[:100]}.{file_extension}"
     
     timestamp = int(time.time())
-    temp_filename = f"pending_{timestamp}_{current_user.id}_{file_hash}_{safe_filename}"
-    temp_path = f"uploads/{temp_filename}"
-
-    with open(temp_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    temp_filename = f"{timestamp}_{current_user.id}_{file_hash}_{safe_filename}"
+    temp_key = f"pending/{temp_filename}"
+    await storage.save_upload(file.file, temp_key)
 
     # add the background processing task to the queue
-    background_tasks.add_task(process_uploaded_paper_task, temp_path, current_user.id)
+    background_tasks.add_task(process_uploaded_paper_task, temp_key, current_user.id)
     
     return UploadPaperResponse(message="Paper uploaded successfully. You'll be notified once processing is complete.")
 
@@ -194,6 +196,7 @@ async def get_paper_details(paper_id: str, current_user: User = Depends(get_curr
     paper = await paper_repo.get_paper_by_id(paper_id)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
+    paper.file_path = storage.get_url(paper.file_path)
 
     course = await course_repo.get_course_by_id(paper.course_id)
 
@@ -251,10 +254,16 @@ async def get_dashboard(current_user: User = Depends(get_current_user)):
     sorted_courses = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     top_5 = [cid for cid, score in sorted_courses[:5]]
 
+    papers_list = []
     if not top_5:
-        return await paper_repo.get_recent_papers(limit=5)
-
-    return await paper_repo.list_by_courses(top_5)
+        papers_list = await paper_repo.get_recent_papers(limit=5)
+    else:
+        papers_list = await paper_repo.list_by_courses(top_5)
+        
+    for paper in papers_list:
+        paper.file_path = storage.get_url(paper.file_path)
+        
+    return papers_list
 
 @router.get("/questions/index", response_model=list[QuestionIndexResponse])
 async def get_questions_index():
