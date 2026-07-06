@@ -205,7 +205,8 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
         
         # Step 1. upload to Gemini File API
         logger.info("Step 1. Uploading paper to Gemini...")
-        upload_result = await gemini.upload_file(storage.get_path(file_path), client)
+        async with storage.download(file_path) as local_path:
+            upload_result = await gemini.upload_file(local_path, client)
         file_uri = upload_result.uri
         file_name = upload_result.name
 

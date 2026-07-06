@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     RAZORPAY_WEBHOOK_SECRET: str
     UNLOCK_COST: int = 5
 
+    # Cloudflare R2 Storage
+    R2_ACCOUNT_ID: str | None = None
+    R2_BUCKET_NAME: str | None = None
+    R2_ACCESS_KEY_ID: str | None = None
+    R2_SECRET_ACCESS_KEY: str | None = None
+
     @property
     def gemini_api_key_list(self) -> list[str]:
         return [k.strip() for k in self.GEMINI_API_KEYS.split(",") if k.strip()]

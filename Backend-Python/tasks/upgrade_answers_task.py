@@ -39,7 +39,8 @@ async def run_upgrade_batch():
         cache_name = None
 
         try:
-            upload_result = await gemini.upload_file(storage.get_path(paper.file_path), client)
+            async with storage.download(paper.file_path) as local_path:
+                upload_result = await gemini.upload_file(local_path, client)
             file_name = upload_result.name
 
             cache_name = await gemini.create_context_cache(
