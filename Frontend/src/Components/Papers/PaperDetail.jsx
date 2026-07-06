@@ -191,7 +191,7 @@ export default function PaperDetail() {
     );
   }
 
-  const isPdf = paper.file_path?.toLowerCase().endsWith(".pdf");
+  const isPdf = paper.file_path?.toLowerCase().split('?')[0].endsWith(".pdf");
   let fileUrl = "";
   if (paper.file_path) {
     if (/^https?:\/\//i.test(paper.file_path)) {

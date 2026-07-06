@@ -289,15 +289,15 @@ export default function QuestionList() {
                 <h3 className="serif-heading" style={{ fontSize: "1.25rem", color: "var(--md-primary)", marginTop: 0, marginBottom: 16, fontWeight: 500 }}>
                   Document Preview
                 </h3>
-                {selectedPaper.filePath.endsWith('.pdf') ? (
+                {selectedPaper.filePath?.toLowerCase().split('?')[0].endsWith('.pdf') ? (
                   <iframe
-                    src={`${API_BASE}${selectedPaper.filePath}#view=FitH`}
+                    src={selectedPaper.filePath.startsWith("http") ? `${selectedPaper.filePath}#view=FitH` : `${API_BASE}${selectedPaper.filePath}#view=FitH`}
                     title="Paper Preview"
                     style={{ width: "100%", height: "70vh", border: "1px solid var(--md-outline-variant)" }}
                   ></iframe>
                 ) : (
                   <img
-                    src={`${API_BASE}${selectedPaper.filePath}`}
+                    src={selectedPaper.filePath.startsWith("http") ? selectedPaper.filePath : `${API_BASE}${selectedPaper.filePath}`}
                     alt="Question Paper"
                     style={{ width: "100%", maxHeight: "70vh", objectFit: "contain", border: "1px solid var(--md-outline-variant)", borderRadius: "var(--shape-md)" }}
                   />
