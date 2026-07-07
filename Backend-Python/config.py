@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     R2_ACCESS_KEY_ID: str | None = None
     R2_SECRET_ACCESS_KEY: str | None = None
 
+    # SMTP Email Configuration
+    SMTP_EMAIL: str
+    SMTP_PASSWORD: str
+
     @property
     def gemini_api_key_list(self) -> list[str]:
         return [k.strip() for k in self.GEMINI_API_KEYS.split(",") if k.strip()]

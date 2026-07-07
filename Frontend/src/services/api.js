@@ -73,11 +73,19 @@ async function request(endpoint, options = {}) {
 
 // ===== Auth =====
 
-export async function signup({ name, email, password, referral_code, enrolled_courses }) {
+export async function sendOtp(email) {
+  return request("/api/send-otp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function signup({ name, email, password, referral_code, enrolled_courses, otp_code }) {
   return request("/api/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email, password, referral_code, enrolled_courses }),
+    body: JSON.stringify({ name, email, password, referral_code, enrolled_courses, otp_code }),
   });
 }
 

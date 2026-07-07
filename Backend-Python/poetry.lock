@@ -169,6 +169,22 @@ files = [
 frozenlist = ">=1.1.0"
 
 [[package]]
+name = "aiosmtplib"
+version = "5.1.2"
+description = "asyncio SMTP client"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "aiosmtplib-5.1.2-py3-none-any.whl", hash = "sha256:070d467cc329dafd0af59108ba5d217d973cba10309910fed359a2a7bfb52d7a"},
+    {file = "aiosmtplib-5.1.2.tar.gz", hash = "sha256:04a0ea3c678f5b719f998f290dce010ca512e1385836d3944206299df03b060f"},
+]
+
+[package.extras]
+docs = ["furo (>=2023.9.10)", "sphinx (>=7.0.0)", "sphinx-autodoc-typehints (>=1.24.0)", "sphinx-copybutton (>=0.5.0)"]
+uvloop = ["uvloop (>=0.18)"]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.4"
 description = "Document parameters, class attributes, return types, and variables inline, with Annotated."
@@ -2742,4 +2758,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<3.15"
-content-hash = "fae623a0d123cd77ae952f8e8ce8ad04f2252f47f066420c1605b37a651e16ed"
+content-hash = "f5d81f331ca8790973ccad40227e51b2f9aa7c803742246c6ad4aa6104a4409b"

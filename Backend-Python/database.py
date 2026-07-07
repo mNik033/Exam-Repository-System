@@ -5,6 +5,7 @@ client = AsyncIOMotorClient(settings.MONGO_URI)
 db = client[settings.DB_NAME]
 
 courses = db["courses"]
+otps = db["otps"]
 papers = db["papers"]
 questions = db["questions"]
 users = db["users"]

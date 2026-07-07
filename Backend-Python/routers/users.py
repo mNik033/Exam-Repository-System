@@ -1,11 +1,14 @@
 import secrets
 import string
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from database import otps
 from security import hash_password, verify_password, create_access_token, get_current_user, guard
 from repositories import user_repo, paper_repo
 from models.user import User, Notification
-from schemas.user import UserSignupRequest, AuthResponse, LoginRequest, ProfileResponse, UnlockAnswerResponse
+from schemas.user import UserSignupRequest, AuthResponse, LoginRequest, ProfileResponse, UnlockAnswerResponse, SendOTPRequest
+from services.email import send_otp_email
 from config import settings
 
 router = APIRouter(prefix="/api", tags=["Users"])
@@ -14,12 +17,42 @@ def generate_referral_code(length: int = 8) -> str:
     alphabet = string.ascii_uppercase + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
+@router.post("/send-otp")
+@guard.rate_limit(requests=2, window=60)
+async def send_otp(payload: SendOTPRequest):
+    existing_user = await user_repo.get_user_by_email(payload.email)
+    if existing_user:
+        raise HTTPException(400, "Email is already registered")
+
+    otp_code = "".join(secrets.choice(string.digits) for _ in range(6))
+
+    await otps.update_one(
+        {"email": payload.email},
+        {"$set": {
+            "code": otp_code,
+            "created_at": datetime.now(timezone.utc)
+        }},
+        upsert=True
+    )
+
+    await send_otp_email(payload.email, otp_code)
+    
+    return {"message": "OTP sent successfully"}
+
 @router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 @guard.rate_limit(requests=5, window=60)
 async def signup(payload: UserSignupRequest):
     existing_user = await user_repo.get_user_by_email(payload.email)
     if existing_user:
         raise HTTPException(status_code=409, detail="User with this email already exists")
+
+    valid_otp = await otps.find_one({
+        "email": payload.email,
+        "code": payload.otp_code
+    })
+
+    if not valid_otp:
+        raise HTTPException(400, "Invalid or expired OTP")
 
     starting_credit = 100
     if payload.referral_code:
@@ -45,6 +78,7 @@ async def signup(payload: UserSignupRequest):
 
     user_id = await user_repo.create_user(new_user)
     token = create_access_token(user_id)
+    await otps.delete_one({"email": payload.email})
     return AuthResponse(
         userId=user_id, 
         token=token, 

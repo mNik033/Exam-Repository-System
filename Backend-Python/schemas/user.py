@@ -8,11 +8,15 @@ def validate_bcrypt_length(v: str) -> str:
 
 BcryptPassword = Annotated[str, AfterValidator(validate_bcrypt_length)]
 
+class SendOTPRequest(BaseModel):
+    email: str
+
 class UserSignupRequest(BaseModel):
     name: str
     email: str
     password: BcryptPassword
     referral_code: str | None = None
+    otp_code: str
     enrolled_courses: list[str] = []
 
 class LoginRequest(BaseModel):
