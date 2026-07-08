@@ -19,6 +19,7 @@ from schemas.paper import (
     BrowsedCourseRequest,
     QuestionIndexResponse,
 )
+from services.metrics import paper_upload_validation_failures_total, course_browsed_total
 
 from tasks.paper_processing import process_uploaded_paper_task
 
@@ -34,6 +35,7 @@ async def _read_file_with_size_limit(file: UploadFile, max_size: int = MAX_FILE_
     while chunk := await file.read(1024 * 1024):
         file_bytes.extend(chunk)
         if len(file_bytes) > max_size:
+            paper_upload_validation_failures_total.labels(reason="size_limit").inc()
             raise HTTPException(
                 status_code=413, 
                 detail=f"File is too large. Maximum size is {max_size // (1024*1024)}MB."
@@ -105,6 +107,7 @@ async def check_duplicate_and_lock(file_hash: str, user_id: str):
 
     if record.status == "processing":
         await upload_registry_repo.add_subscriber(file_hash, user_id)
+        paper_upload_validation_failures_total.labels(reason="already_processing").inc()
         raise HTTPException(
             status_code=409,
             detail="This file is already being processed. You'll be notified once processing is complete."
@@ -116,11 +119,13 @@ async def check_duplicate_and_lock(file_hash: str, user_id: str):
             type="info",
             paper_id=record.paper_id
         )
+        paper_upload_validation_failures_total.labels(reason="already_completed").inc()
         raise HTTPException(
             status_code=409,
             detail="This paper has already been processed. Check your notifications for the same."
         )
     elif record.status == "rejected":
+        paper_upload_validation_failures_total.labels(reason="already_rejected").inc()
         raise HTTPException(
             status_code=422,
             detail="This paper has previously been analyzed and rejected. Please ensure you're uploading a valid exam paper."
@@ -138,6 +143,7 @@ async def upload_paper(
     # fast rejection based on headers
     if "content-length" in request.headers:
         if int(request.headers["content-length"]) > MAX_FILE_SIZE:
+            paper_upload_validation_failures_total.labels(reason="size_limit").inc()
             raise HTTPException(
                 status_code=413, 
                 detail=f"File is too large. Maximum limit is {MAX_FILE_SIZE//(1024*1024)}MB."
@@ -152,6 +158,7 @@ async def upload_paper(
     is_png = header.startswith(b"\x89PNG\r\n\x1a\n")
     
     if not (is_pdf or is_jpeg or is_png):
+        paper_upload_validation_failures_total.labels(reason="invalid_format").inc()
         raise HTTPException(
             status_code=400, 
             detail="Invalid file format. Only true PDF, JPEG, and PNG files are supported."
@@ -237,6 +244,7 @@ async def update_browsed_course(
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
 
+    course_browsed_total.labels(course_code=course.code).inc()
     await user_repo.add_browsed_course(current_user.id, payload.course_id)
 
 @router.get("/dashboard", response_model=list[Paper])

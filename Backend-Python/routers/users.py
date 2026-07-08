@@ -9,6 +9,10 @@ from repositories import user_repo, paper_repo
 from models.user import User, Notification
 from schemas.user import UserSignupRequest, AuthResponse, LoginRequest, ProfileResponse, UnlockAnswerResponse, SendOTPRequest
 from services.email import send_otp_email
+from services.metrics import (
+    credits_awarded_total, user_referrals_total, 
+    credits_spent_total, answers_unlocked_total
+)
 from config import settings
 
 router = APIRouter(prefix="/api", tags=["Users"])
@@ -61,6 +65,7 @@ async def signup(payload: UserSignupRequest):
             raise HTTPException(status_code=400, detail="Invalid referral code")
         starting_credit = 300
         await user_repo.update_credits(referrer.id, 200)
+        credits_awarded_total.labels(reason="referral").inc(200)
         await user_repo.add_notification(
             user_id=referrer.id,
             message="Someone signed up using your referral code! You have been credited 200 credits.",
@@ -79,6 +84,7 @@ async def signup(payload: UserSignupRequest):
     user_id = await user_repo.create_user(new_user)
     token = create_access_token(user_id)
     await otps.delete_one({"email": payload.email})
+    credits_awarded_total.labels(reason="signup").inc(starting_credit)
     return AuthResponse(
         userId=user_id, 
         token=token, 
@@ -134,6 +140,9 @@ async def unlock_answer(
     new_credit = await user_repo.unlock_answer(current_user.id, question_id, settings.UNLOCK_COST)
     if new_credit is None:
         raise HTTPException(status_code=400, detail="Failed to unlock answer")
+
+    credits_spent_total.labels(action="unlock_answer").inc(settings.UNLOCK_COST)
+    answers_unlocked_total.inc()
 
     return UnlockAnswerResponse(
         message="Answer unlocked successfully", 

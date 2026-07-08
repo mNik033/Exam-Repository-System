@@ -1,11 +1,14 @@
 import asyncio
 import logging
+import secrets
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from guard.middleware import SecurityMiddleware
 from pathlib import Path
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from config import settings
 from database import client, otps
@@ -76,6 +79,20 @@ app.include_router(users_router)
 app.include_router(courses_router)
 app.include_router(papers_router)
 app.include_router(payments_router)
+
+if settings.PROMETHEUS_TOKEN:
+    bearer_scheme = HTTPBearer()
+
+    def verify_prometheus_token(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+        if not secrets.compare_digest(credentials.credentials, settings.PROMETHEUS_TOKEN):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Prometheus token"
+            )
+
+    @app.get("/metrics", include_in_schema=False)
+    def get_metrics(token=Depends(verify_prometheus_token)):
+        return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 @app.get("/api/health")
 async def health_check():

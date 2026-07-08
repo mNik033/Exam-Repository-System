@@ -13,6 +13,10 @@ from pydantic import BaseModel, Field
 from typing import Callable, Any, Coroutine
 
 from config import settings
+from services.metrics import (
+    api_keys_available, api_key_exhaustion_total,
+    gemini_api_duration_seconds, track_gemini_latency
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +86,12 @@ class ApiKeyPool:
             for key in api_keys
         ]
 
+    def _count_available_keys(self):
+        now = time.monotonic()
+        return sum(1 for ctx in self.contexts
+                if not ctx.rate_limiter.timestamps 
+                or ctx.rate_limiter.timestamps[-1] <= now)
+
     def acquire(self) -> ApiContext:
         def _last_used(entry: ApiContext) -> float:
             if not entry.rate_limiter.timestamps:
@@ -97,6 +107,7 @@ class ApiKeyPool:
     def mark_exhausted(self, ctx: ApiContext):
         # push key 1 hour into the future so it's deprioritized
         ctx.rate_limiter.timestamps.append(time.monotonic() + 3600)
+        api_key_exhaustion_total.inc()
 
 
 # ── Module Configuration ──────────────────────────────────────────────
@@ -108,6 +119,7 @@ ANSWER_MODELS = {
 EMBEDDINGS_MODEL = "gemini-embedding-001"
 
 api_key_pool = ApiKeyPool(api_keys=settings.gemini_api_key_list)
+api_keys_available.set_function(api_key_pool._count_available_keys)
 
 # ── Prompt Templates ──────────────────────────────────────────────────
 
@@ -184,6 +196,7 @@ class AnswerExtraction(BaseModel):
 
 # ── File Management ──────────────────────────────────────────────────
 
+@track_gemini_latency("upload_file")
 async def upload_file(file_path: str, client: genai.Client):
     logger.info("Uploading file to Gemini: %s", file_path)
     upload_result = await client.aio.files.upload(file=file_path)
@@ -200,6 +213,7 @@ async def delete_file(file_name: str, client: genai.Client) -> None:
 
 # ── Context Caching ──────────────────────────────────────────────────
 
+@track_gemini_latency("create_cache")
 async def create_context_cache(
     file_uri: str, mime_type: str, client: genai.Client, target_model: int = 1
 ) -> str | None:
@@ -238,6 +252,7 @@ def _build_file_content(file_uri: str, mime_type: str) -> types.Content:
         parts=[types.Part.from_uri(file_uri=file_uri, mime_type=mime_type)]
     )
 
+@track_gemini_latency("extract_paper_data")
 async def extract_paper_data(
     file_uri: str,
     mime_type: str,
@@ -415,6 +430,7 @@ async def generate_single_answer(
         logger.error("API error generating answer for '%.30s...': %s", ques_text, e)
         raise
 
+@track_gemini_latency("generate_answers")
 async def generate_answers_parallel(
     ques_texts: list[str],
     file_uri: str,

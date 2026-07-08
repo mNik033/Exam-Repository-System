@@ -3,12 +3,18 @@ import uuid
 import shutil
 import asyncio
 import mimetypes
+import time
 from google import genai
 from pathlib import Path
 
 from models.question import Question
 from repositories import paper_repo, question_repo, user_repo, course_repo, upload_registry_repo
 from services import gemini, storage
+from services.metrics import (
+    paper_processing_total, paper_processing_duration,
+    questions_reused_total, questions_created_total,
+    credits_awarded_total, active_paper_processing_tasks
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +86,7 @@ async def _deduplicate_questions(
         exact_match = await question_repo.find_exact_match(course_id, question_text)
         if exact_match:
             logger.info("  Q%d: Exact match (id=%s). Reusing.", i + 1, exact_match.id)
+            questions_reused_total.labels(match_type="exact").inc()
             question_ids.append(exact_match.id)
             continue
 
@@ -97,6 +104,7 @@ async def _deduplicate_questions(
 
         if best_match and best_sim >= SIMILARITY_THRESHOLD:
             logger.info("  Q%d: Similar to existing question (id=%s, sim=%.3f). Reusing.", i + 1, best_match.id, best_sim)
+            questions_reused_total.labels(match_type="cosine").inc()
             question_ids.append(best_match.id)
             continue
         
@@ -316,6 +324,7 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
                 for idx, item in enumerate(new_questions)
             ]
             inserted_ids = await question_repo.create_questions_bulk(questions_to_insert)
+            questions_created_total.inc(len(questions_to_insert))
 
             for idx, item in enumerate(new_questions):
                 question_ids[item["index"]] = inserted_ids[idx]
@@ -345,6 +354,7 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
             # only award credits to the original uploader
             if sub == user_id:
                 await user_repo.update_credits(sub, 100)
+                credits_awarded_total.labels(reason="paper_processed").inc(100)
                 msg = f"Your paper '{paper_title}' has been successfully processed! +100 credits awarded."
             else:
                 msg = f"A paper you tried to upload ('{paper_title}') has finished processing!"
@@ -371,6 +381,7 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
     local_filename = Path(file_path).name
     file_hash = local_filename.split("_")[2]
 
+    start_time = time.time()
     for _ in range(len(gemini.api_key_pool.contexts)):
         try:
             api_context = gemini.api_key_pool.acquire()
@@ -378,12 +389,16 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
             break
             
         try:
+            active_paper_processing_tasks.inc()
             await asyncio.wait_for(
                 _run_paper_pipeline(file_path, file_hash, user_id, api_context), timeout=240
             )
+            paper_processing_duration.observe(time.time()-start_time)
+            paper_processing_total.labels(status="success", failure_reason="").inc()
             return
         except asyncio.TimeoutError:
             logger.error(f"Paper processing timed out after 4 minutes for: {file_path}")
+            paper_processing_total.labels(status="failed", failure_reason="timeout").inc()
             await _notify_and_fail_paper(
                 file_hash, user_id, file_path, "Paper processing timed out. Please try again."
             )
@@ -392,8 +407,12 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
             gemini.api_key_pool.mark_exhausted(api_context)
             continue
         except Exception:
+            paper_processing_total.labels(status="failed", failure_reason="unknown_error").inc()
             await _notify_and_fail_paper(file_hash, user_id, file_path, "An error occurred while processing your paper. Please try again later.")
             return
+        finally:
+            active_paper_processing_tasks.dec()
 
     logger.error("Paper processing failed: All keys exhausted")
+    paper_processing_total.labels(status="failed", failure_reason="all_keys_exhausted").inc()
     await _notify_and_fail_paper(file_hash, user_id, file_path, "Our daily processing capacity has been reached. Please re-upload your paper tomorrow.")

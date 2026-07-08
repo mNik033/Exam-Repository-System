@@ -2,6 +2,7 @@ import aiosmtplib
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 from config import settings
+from services.metrics import otp_sent_total
 
 async def send_otp_email(to_email: str, otp_code: str):
     message = EmailMessage()
@@ -36,11 +37,16 @@ async def send_otp_email(to_email: str, otp_code: str):
     message.set_content(text_content)
     message.add_alternative(html_content, subtype='html')
 
-    await aiosmtplib.send(
-        message,
-        hostname="smtp.gmail.com",
-        port=465,
-        use_tls=True,
-        username=settings.SMTP_EMAIL,
-        password=settings.SMTP_PASSWORD,
-    )
+    try:
+        await aiosmtplib.send(
+            message,
+            hostname="smtp.gmail.com",
+            port=465,
+            use_tls=True,
+            username=settings.SMTP_EMAIL,
+            password=settings.SMTP_PASSWORD,
+        )
+        otp_sent_total.labels(status="success").inc()
+    except Exception as e:
+        logger.error(f"Failed to send OTP to {to_email}: {e}")
+        otp_sent_total.labels(status="failed").inc()
