@@ -24,6 +24,15 @@ def generate_referral_code(length: int = 8) -> str:
 @router.post("/send-otp")
 @guard.rate_limit(requests=2, window=60)
 async def send_otp(payload: SendOTPRequest):
+    if settings.INSTITUTE_DOMAIN:
+        expected_domain = settings.INSTITUTE_DOMAIN.lower()
+        actual_domain = payload.email.split("@")[-1].lower()
+        if actual_domain != expected_domain:
+            raise HTTPException(
+                400, 
+                f"Please sign up using your institute email (@{expected_domain})"
+            )
+
     existing_user = await user_repo.get_user_by_email(payload.email)
     if existing_user:
         raise HTTPException(400, "Email is already registered")

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     RAZORPAY_WEBHOOK_SECRET: str
     UNLOCK_COST: int = 5
     PROMETHEUS_TOKEN: str | None = None
+    INSTITUTE_DOMAIN: str | None = None
 
     # Cloudflare R2 Storage
     R2_ACCOUNT_ID: str | None = None

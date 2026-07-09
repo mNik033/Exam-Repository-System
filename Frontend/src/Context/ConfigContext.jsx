@@ -3,16 +3,20 @@ import { getConfig } from "../services/api";
 
 export const ConfigContext = createContext({
   unlockCost: null,
+  instituteDomain: null,
 });
 
 export const ConfigProvider = ({ children }) => {
-  const [config, setConfig] = useState({ unlockCost: null });
+  const [config, setConfig] = useState({ unlockCost: null, instituteDomain: null });
 
   useEffect(() => {
     getConfig()
       .then(data => {
-        if (data && data.unlock_cost !== undefined) {
-          setConfig({ unlockCost: data.unlock_cost });
+        if (data) {
+          setConfig({ 
+            unlockCost: data.unlock_cost !== undefined ? data.unlock_cost : null,
+            instituteDomain: data.institute_domain || null
+          });
         }
       })
       .catch(err => console.error("Failed to load config", err));

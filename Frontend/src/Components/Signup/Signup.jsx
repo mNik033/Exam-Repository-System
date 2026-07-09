@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { GraduationCap, ArrowRight } from "lucide-react";
 import AuthContext from "../../Context/AuthContext";
 import AuthSidebar from "../Login/AuthSidebar";
+import { ConfigContext } from "../../Context/ConfigContext";
 import { useToast } from "../Toast/ToastContext";
 import { signup as signupApi, getCourses, sendOtp } from "../../services/api";
 import Input from "../UI/Input";
@@ -12,6 +13,7 @@ import Button from "../UI/Button";
 export default function Signup() {
   const navigate = useNavigate();
   const auth = useContext(AuthContext);
+  const { instituteDomain } = useContext(ConfigContext);
   const toast = useToast();
 
   const [loading, setLoading] = useState(false);
@@ -159,9 +161,9 @@ export default function Signup() {
               {/* Email */}
               <Input
                 id="signup-email" name="email" type="email"
-                label="EMAIL ADDRESS"
+                label={instituteDomain ? "INSTITUTE EMAIL ADDRESS" : "EMAIL ADDRESS"}
                 value={formData.email} onChange={handleChange}
-                placeholder="jane.doe@university.edu" required
+                placeholder={instituteDomain ? `******@${instituteDomain}` : "jane.doe@university.edu"} required
               />
 
               {/* Password */}

@@ -103,7 +103,8 @@ async def health_check():
 @app.get("/api/config")
 async def get_config():
     return {
-        "unlock_cost": settings.UNLOCK_COST
+        "unlock_cost": settings.UNLOCK_COST,
+        "institute_domain": settings.INSTITUTE_DOMAIN
     }
 
 async def scan_and_process_pending_papers():
