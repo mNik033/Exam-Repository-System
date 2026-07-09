@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowLeft, Lock, Unlock, Tag, HelpCircle, Wallet,
@@ -34,7 +34,7 @@ const QuestionCard = React.memo(({ q, index, handleUnlock }) => {
   };
 
   return (
-    <div className="card-outlined question-card">
+    <div className="card-outlined question-card" id={`q-${q._id}`}>
       <div className="question-card-header">
         <span className="badge badge-primary question-index-badge">
           Q{index + 1}
@@ -110,6 +110,7 @@ const QuestionCard = React.memo(({ q, index, handleUnlock }) => {
 export default function PaperDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const auth = useContext(AuthContext);
   const { unlockCost } = useContext(ConfigContext);
   const toast = useToast();
@@ -140,6 +141,27 @@ export default function PaperDetail() {
   useEffect(() => {
     fetchDetails();
   }, [fetchDetails]);
+
+  // Handle Hash Scrolling
+  useEffect(() => {
+    if (!loading && questions.length > 0 && location.hash) {
+      const hashId = location.hash.substring(1); // removes the '#'
+      setTimeout(() => {
+        const element = document.getElementById(hashId);
+        const container = document.querySelector('.detail-questions-list');
+        if (element && container) {
+          const containerTop = container.getBoundingClientRect().top;
+          const elementTop = element.getBoundingClientRect().top;
+          const offset = elementTop - containerTop + container.scrollTop;
+          
+          container.scrollTo({ top: offset - 20, behavior: "smooth" });
+          
+          element.classList.add("highlight-flash");
+          setTimeout(() => element.classList.remove("highlight-flash"), 2500);
+        }
+      }, 200); // Wait briefly for react to paint the DOM
+    }
+  }, [loading, questions.length, location.hash]);
 
   const handleUnlock = useCallback(async (questionId) => {
     if (unlockCost === null) return false;

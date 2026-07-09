@@ -334,6 +334,8 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
         perm_key = await _move_to_permanent_storage(file_path, target_name)
         paper_title = f"[{course.code}] {course.name} - {extracted_data.examType} ({extracted_data.session} {extracted_data.sessionYear})"
 
+        all_tags = list({q.tag for q in extracted_data.questions if q.tag})
+
         paper_id = await paper_repo.create_paper(
             title=paper_title,
             file_path=perm_key,
@@ -343,6 +345,7 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
             session_year=extracted_data.sessionYear,
             exam_type=extracted_data.examType,
             question_ids=question_ids,
+            tags=all_tags,
             processing_model=DEFAULT_ANSWER_MODEL
         )
         logger.info("Paper created: %s (id=%s)", paper_title, paper_id)

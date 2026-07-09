@@ -11,6 +11,7 @@ class Paper(BaseModel):
     session_year: str
     exam_type: str
     question_ids: list[str] = []
+    tags: list[str] = []
     processing_model: int = 1
     created_at: datetime = Field(default_factory=datetime.utcnow)
     

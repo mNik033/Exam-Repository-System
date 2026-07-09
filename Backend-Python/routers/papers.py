@@ -18,6 +18,9 @@ from schemas.paper import (
     QuestionPaperResponse,
     BrowsedCourseRequest,
     QuestionIndexResponse,
+    PaginatedSearchResponse,
+    SearchPaperResponse,
+    PaperFiltersResponse,
 )
 from services.metrics import paper_upload_validation_failures_total, course_browsed_total
 
@@ -45,13 +48,71 @@ async def _read_file_with_size_limit(file: UploadFile, max_size: int = MAX_FILE_
     
     return bytes(file_bytes)
 
-@router.get("/getPapers", response_model=PaginatedPaperResponse)
-async def get_papers(cursor: str | None = None, limit: int = 10):
+@router.get("/getPapers", response_model=PaginatedSearchResponse)
+async def get_papers(
+    q: str | None = None,
+    exam_type: str | None = None,
+    session_year: str | None = None,
+    course_id: str | None = None,
+    cursor: str | None = None,
+    limit: int = 10
+):
     limit = min(limit, 50)
-    papers_list, next_cursor = await paper_repo.get_all_papers(cursor, limit)
+    papers_list, next_cursor = await paper_repo.get_all_papers(
+        q, exam_type, session_year, course_id, cursor, limit
+    )
+    
     for paper in papers_list:
         paper.file_path = storage.get_url(paper.file_path)
-    return PaginatedPaperResponse(papers=papers_list, next_cursor=next_cursor)
+    
+    # if a search query is active, find and attach matching questions
+    papers_with_matches = []
+    if q and papers_list:
+        all_q_ids = [q_id for paper in papers_list for q_id in paper.question_ids]
+
+        all_questions = await question_repo.get_questions_by_ids(all_q_ids)
+        question_map = {question.id: question for question in all_questions}
+
+        q_lower = q.lower()
+
+        for paper in papers_list:
+            matched_qs = []
+            
+            if q_lower not in paper.title.lower():
+                for q_id in paper.question_ids:
+                    question = question_map.get(q_id)
+                    if not question:
+                        continue
+                    
+                    if question.tag and q_lower in question.tag.lower():
+                        matched_qs.append(QuestionIndexResponse(
+                            _id=question.id,
+                            question_text=question.question_text,
+                            course_id=question.course_id,
+                            tag=question.tag
+                        ))
+            
+            paper_data = paper.dict(by_alias=True)
+            paper_data["matched_questions"] = matched_qs
+            papers_with_matches.append(SearchPaperResponse(**paper_data))
+    else:
+        for paper in papers_list:
+            paper_data = paper.dict(by_alias=True)
+            paper_data["matched_questions"] = []
+            papers_with_matches.append(SearchPaperResponse(**paper_data))
+
+    return PaginatedSearchResponse(papers=papers_with_matches, next_cursor=next_cursor)
+
+@router.get("/papers/filters", response_model=PaperFiltersResponse)
+async def get_paper_filters():
+    exam_types, session_years, course_ids = await paper_repo.get_distinct_paper_filters()
+    courses = await course_repo.get_courses_by_ids(course_ids)
+    
+    return {
+        "exam_types": exam_types,
+        "session_years": session_years,
+        "courses": courses
+    }
 
 @router.get("/myPapers", response_model=list[Paper])
 async def get_my_papers(current_user: User = Depends(get_current_user)):

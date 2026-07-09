@@ -29,3 +29,20 @@ class BrowsedCourseRequest(BaseModel):
 class UploadPaperResponse(BaseModel):
     message: str
     paper_id: str | None = None
+
+class SearchPaperResponse(Paper):
+    matched_questions: list[QuestionIndexResponse] = []
+
+class PaginatedSearchResponse(BaseModel):
+    papers: list[SearchPaperResponse] = []
+    next_cursor: str | None = None
+
+class CourseFilterResponse(BaseModel):
+    id: str
+    code: str
+    name: str
+
+class PaperFiltersResponse(BaseModel):
+    exam_types: list[str]
+    session_years: list[str]
+    courses: list[CourseFilterResponse]

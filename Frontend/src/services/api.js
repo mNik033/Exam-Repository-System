@@ -115,9 +115,22 @@ export async function getCourses() {
 
 // ===== Papers =====
 
-export async function getPapers(cursor = null) {
-  const url = cursor ? `/api/getPapers?cursor=${encodeURIComponent(cursor)}` : "/api/getPapers";
+export async function getPapers(options = {}) {
+  const { q = "", exam_type = "", session_year = "", course_id = "", cursor = null } = options || {};
+
+  const params = new URLSearchParams();
+  if (q) params.append("q", q);
+  if (exam_type) params.append("exam_type", exam_type);
+  if (session_year) params.append("session_year", session_year);
+  if (course_id) params.append("course_id", course_id);
+  if (cursor) params.append("cursor", cursor);
+
+  const url = `/api/getPapers?${params.toString()}`;
   return request(url);
+}
+
+export async function getPaperFilters() {
+  return request("/api/papers/filters");
 }
 
 export async function getPaperDetails(paperId, token) {

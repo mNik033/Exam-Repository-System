@@ -27,6 +27,21 @@ async def get_course_by_id(course_id: str) -> Course | None:
     course_dict["_id"] = str(course_dict["_id"])
     return Course(**course_dict)
 
+async def get_courses_by_ids(course_ids: list[str]) -> list[Course]:
+    valid_ids = []
+    for cid in course_ids:
+        try:
+            valid_ids.append(ObjectId(cid))
+        except Exception:
+            continue
+            
+    cursor = courses.find({"_id": {"$in": valid_ids}}).sort("code", 1)
+    results = []
+    async for doc in cursor:
+        doc["_id"] = str(doc["_id"])
+        results.append(Course(**doc))
+    return results
+
 async def get_course_by_code(code: str) -> Course | None:
     course_dict = await courses.find_one({"code": code})
     if not course_dict:

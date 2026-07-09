@@ -3,7 +3,7 @@ from bson import ObjectId
 from database import questions
 from models.question import Question
 
-async def ensure_indexes() -> None:
+async def ensure_question_indexes() -> None:
     await questions.create_index([("question_text", "text")])
     await questions.create_index([("course_id", 1), ("question_text", 1)])
 
