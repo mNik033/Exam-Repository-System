@@ -25,6 +25,9 @@ security_config = SecurityConfig(
     auto_ban_duration=86400,
     custom_log_file="security.log",
     block_cloud_providers={"AWS", "GCP", "Azure"},
+    enable_redis=True,
+    redis_url=settings.REDIS_URL.replace("redis://", f"redis://:{settings.REDIS_PASSWORD}@"),
+    redis_prefix=f"{settings.REDIS_PREFIX}security:"
 )
 
 guard = SecurityDecorator(security_config)

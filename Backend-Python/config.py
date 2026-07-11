@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     PROMETHEUS_TOKEN: str | None = None
     INSTITUTE_DOMAIN: str | None = None
 
+    # Redis Configuration
+    REDIS_URL: str
+    REDIS_PASSWORD: str
+    REDIS_PREFIX: str = "examrepo:"
+
     # Cloudflare R2 Storage
     R2_ACCOUNT_ID: str | None = None
     R2_BUCKET_NAME: str | None = None
