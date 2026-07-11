@@ -1,5 +1,7 @@
 import asyncio
 import logging
+from config import settings
+from database import redis_client
 from repositories import paper_repo, question_repo
 from services import gemini, storage
 from tasks import paper_processing
@@ -23,6 +25,12 @@ async def run_upgrade_batch():
         return
 
     for paper in papers:
+        lock_key = f"{settings.REDIS_PREFIX}:lock:upgrade_paper:{paper.id}"
+        lock_acquired = await redis_client.set(lock_key, "locked", nx=True, ex=900)
+        if not lock_acquired:
+            logger.info("Skipping paper %s - already being processed", paper.id)
+            continue
+
         logger.info(f"Upgrading answers for paper: {paper.title}")
 
         client = api_context.client
@@ -84,7 +92,8 @@ async def run_upgrade_batch():
             if cache_name:
                 await gemini.delete_context_cache(cache_name, client)
             if file_name:
-                await gemini.delete_file(file_name, client)         
+                await gemini.delete_file(file_name, client)
+            await redis_client.delete(lock_key)
 
 async def start_background_upgrade_task(interval_seconds: int):
     logger.info("Background upgrade task scheduled.")

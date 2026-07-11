@@ -7,6 +7,8 @@ import time
 from google import genai
 from pathlib import Path
 
+from config import settings
+from database import redis_client
 from models.question import Question
 from repositories import paper_repo, question_repo, user_repo, course_repo, upload_registry_repo
 from services import gemini, storage
@@ -384,6 +386,12 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
     local_filename = Path(file_path).name
     file_hash = local_filename.split("_")[2]
 
+    lock_key = f"{settings.REDIS_PREFIX}:lock:process_paper:{file_hash}"
+    lock_acquired = await redis_client.set(lock_key, "locked", nx=True, ex=300)
+    if not lock_acquired:
+        logger.info(f"File {file_hash} already being processed.")
+        return
+
     start_time = time.time()
     for _ in range(len(gemini.api_key_pool.contexts)):
         try:
@@ -415,6 +423,7 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
             return
         finally:
             active_paper_processing_tasks.dec()
+            await redis_client.delete(lock_key)
 
     logger.error("Paper processing failed: All keys exhausted")
     paper_processing_total.labels(status="failed", failure_reason="all_keys_exhausted").inc()
