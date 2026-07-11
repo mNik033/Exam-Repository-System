@@ -11,7 +11,7 @@ from pathlib import Path
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from config import settings
-from database import client, otps
+from database import client, otps, redis_client
 from security import security_config, guard
 
 from routers.users import router as users_router
@@ -32,6 +32,11 @@ async def lifespan(app: FastAPI):
     # verify DB is reachable
     await client.admin.command('ping')
     print("Connnected to DB")
+    
+    # verify Redis is reachable
+    await redis_client.ping()
+    print("Connected to Redis")
+    
     await otps.create_index([("created_at", 1)], expireAfterSeconds=300)
 
     # try upgrading answers to a better model
