@@ -40,3 +40,4 @@ class ProfileResponse(BaseModel):
 class UnlockAnswerResponse(BaseModel):
     message: str
     credit: int
+    answer_text: str | None = None

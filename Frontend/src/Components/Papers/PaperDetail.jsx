@@ -184,13 +184,15 @@ export default function PaperDetail() {
       const response = await unlockAnswer(questionId, auth.token);
       auth.updateCredit(response.credit);
       toast.success("Answer unlocked!");
-      await fetchDetails();
+      setQuestions(prev => prev.map(q =>
+        q._id === questionId ? { ...q, answer_text: response.answer_text } : q
+      ));
       return true;
     } catch (err) {
       toast.error(err.message || "Failed to unlock answer");
       return false;
     }
-  }, [confirm, auth, navigate, toast, fetchDetails]);
+  }, [confirm, auth, navigate, toast]);
 
   if (loading) {
     return <FullPageSpinner />;

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from database import otps
 from security import hash_password, verify_password, create_access_token, get_current_user, guard
-from repositories import user_repo, paper_repo
+from repositories import user_repo, paper_repo, question_repo
 from models.user import User, Notification
 from schemas.user import UserSignupRequest, AuthResponse, LoginRequest, ProfileResponse, UnlockAnswerResponse, SendOTPRequest
 from services.email import send_otp_email
@@ -146,6 +146,10 @@ async def unlock_answer(
     if current_user.credit < settings.UNLOCK_COST:
         raise HTTPException(status_code=402, detail="Insufficient credits")
 
+    question = await question_repo.get_question_by_id(question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
     new_credit = await user_repo.unlock_answer(current_user.id, question_id, settings.UNLOCK_COST)
     if new_credit is None:
         raise HTTPException(status_code=400, detail="Failed to unlock answer")
@@ -155,7 +159,8 @@ async def unlock_answer(
 
     return UnlockAnswerResponse(
         message="Answer unlocked successfully", 
-        credit=new_credit
+        credit=new_credit,
+        answer_text=question.answer_text
     )
 
 @router.get("/getUnlockedAnswers")
