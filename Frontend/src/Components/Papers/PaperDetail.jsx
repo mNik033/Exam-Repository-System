@@ -48,7 +48,7 @@ const QuestionCard = React.memo(({ q, index, handleUnlock }) => {
 
       <div
         onClick={() => setIsQuestionExpanded(!isQuestionExpanded)}
-        className={`question-text-wrapper ${!isQuestionExpanded ? "question-text-clamped" : ""}`}
+        className={`markdown-body question-text-wrapper ${!isQuestionExpanded ? "question-text-clamped" : ""}`}
         title={isQuestionExpanded ? "Click to collapse question" : "Click to expand question"}
       >
         <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
@@ -92,7 +92,7 @@ const QuestionCard = React.memo(({ q, index, handleUnlock }) => {
                 transition={{ duration: 0.2 }}
                 className="answer-motion-wrapper"
               >
-                <div className="answer-text-box">
+                <div className="markdown-body answer-text-box">
                   <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
                     {(!q.answer_text || q.answer_text.trim() === "") ? "*Answer currently not available.*" : q.answer_text}
                   </ReactMarkdown>

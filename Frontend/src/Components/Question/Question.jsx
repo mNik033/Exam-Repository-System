@@ -109,7 +109,7 @@ export default function QuestionList() {
 
   const handleUnlock = async (qId) => {
     if (unlockCost === null) return;
-    
+
     if ((auth.credit || 0) < unlockCost) {
       toast.error("Not enough credits to unlock!");
       navigate("/subscription");
@@ -126,7 +126,7 @@ export default function QuestionList() {
 
     try {
       const data = await unlockAnswer(qId, auth.token);
-      
+
       // Deduct credits in the Auth context
       auth.updateCredit(data.credit);
       toast.success("Answer unlocked!");
@@ -170,7 +170,7 @@ export default function QuestionList() {
   return (
     <div style={{ minHeight: "100vh", paddingTop: "var(--navbar-height)", background: "var(--md-background)" }} className="dot-pattern-bg">
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 24px 120px" }}>
-        
+
         {!selectedPaper ? (
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
@@ -243,7 +243,7 @@ export default function QuestionList() {
                           {new Date(paper.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </span>
                       </div>
-                      
+
                       {paper.questions && paper.questions.length > 0 && (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
                           {paper.questions.map((q, idx) =>
@@ -283,7 +283,7 @@ export default function QuestionList() {
 
             {/* Split View */}
             <div style={{ display: "grid", gap: 32, gridTemplateColumns: "repeat(auto-fit, minmax(450px, 1fr))" }}>
-              
+
               {/* Left Column: Paper File Preview */}
               <div className="card-outlined" style={{ padding: 20, background: "var(--md-surface)", height: "fit-content" }}>
                 <h3 className="serif-heading" style={{ fontSize: "1.25rem", color: "var(--md-primary)", marginTop: 0, marginBottom: 16, fontWeight: 500 }}>
@@ -320,26 +320,20 @@ export default function QuestionList() {
                         Q{index + 1}: {qa.question}
                       </h4>
                       <hr style={{ border: "none", borderTop: "1px solid var(--md-outline-variant)", marginBottom: 16 }} />
-                      
+
                       <div style={{ color: "var(--md-on-surface)" }}>
                         {qa.answer ? (
-                          <div style={{ fontSize: "0.9375rem", lineHeight: 1.6 }}>
+                          <div className="markdown-body" style={{ fontSize: "0.9375rem", lineHeight: 1.6 }}>
                             <ReactMarkdown
                               remarkPlugins={[remarkGfm, remarkMath]}
                               rehypePlugins={[rehypeKatex]}
                               components={{
                                 math: ({ node: _node, ...props }) => (
-                                  <div className="w-full my-4 flex justify-center">
+                                  <div className="w-full my-4 flex justify-center overflow-x-auto">
                                     <span {...props} />
                                   </div>
                                 ),
                                 inlineMath: ({ node: _node, ...props }) => <span {...props} />,
-                                h1: ({ node: _node, ...props }) => <h1 {...props} className="mt-2 mb-2 text-2xl font-bold" />,
-                                h2: ({ node: _node, ...props }) => <h2 {...props} className="mt-2 mb-2 text-xl font-bold" />,
-                                h3: ({ node: _node, ...props }) => <h3 {...props} className="mt-2 mb-2 text-lg font-bold" />,
-                                p: ({ node: _node, ...props }) => <p {...props} style={{ margin: "0 0 12px 0" }} />,
-                                ul: ({ node: _node, ...props }) => <ul {...props} className="list-disc ml-6 mb-3" />,
-                                ol: ({ node: _node, ...props }) => <ol {...props} className="list-decimal ml-6 mb-3" />,
                               }}
                             >
                               {qa.answer}
@@ -364,7 +358,7 @@ export default function QuestionList() {
                           </div>
                         )}
                       </div>
-                      
+
                       {qa.tag && (
                         <div style={{ marginTop: 16, display: "flex" }}>
                           <span className="badge" style={{ fontSize: "0.65rem", background: "var(--md-surface-container-highest)", border: "none" }}>
