@@ -34,6 +34,10 @@ async def ensure_paper_indexes() -> None:
         ("title", "text"),
         ("tags", "text")
     ])
+    await papers.create_index([("course_id", 1), ("session_year", -1), ("_id", -1)])
+    await papers.create_index([("uploaded_by", 1), ("session_year", -1), ("_id", -1)])
+    await papers.create_index([("created_at", -1)])
+    await papers.create_index([("course_id", 1), ("session", 1), ("session_year", 1), ("exam_type", 1)])
 
 async def get_all_papers(
     q: str | None = None,

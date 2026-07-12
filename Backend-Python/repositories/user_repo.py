@@ -8,6 +8,10 @@ from models.user import User, Notification
 
 logger = logging.getLogger(__name__)
 
+async def ensure_user_indexes() -> None:
+    await users.create_index([("email", 1)], unique=True)
+    await users.create_index([("ref_code", 1)], unique=True)
+
 async def get_user_by_email(email: str) -> User | None:
     user_dict = await users.find_one({"email": email})
     if not user_dict:

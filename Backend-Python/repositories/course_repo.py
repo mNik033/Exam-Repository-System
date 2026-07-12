@@ -3,6 +3,9 @@ from bson import ObjectId
 from models.course import Course
 from database import courses
 
+async def ensure_course_indexes() -> None:
+    await courses.create_index([("code", 1)], unique=True)
+
 async def get_all_courses() -> list[Course]:
     cursor = courses.find({})
     courses_list = await cursor.to_list(length=None)
