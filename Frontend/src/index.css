@@ -3509,3 +3509,17 @@ body[data-theme='dark'] .sec-2-card-2-icon-box {
 .highlight-flash {
   animation: highlightFlash 2.5s ease-out;
 }
+
+/* ── About Us Layout ── */
+.about-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 64px;
+}
+
+@media (max-width: 992px) {
+  .about-grid {
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+}
