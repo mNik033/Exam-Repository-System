@@ -7,6 +7,7 @@ import time
 
 from collections import deque
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
@@ -105,8 +106,15 @@ class ApiKeyPool:
         return best
     
     def mark_exhausted(self, ctx: ApiContext):
-        # push key 1 hour into the future so it's deprioritized
-        ctx.rate_limiter.timestamps.append(time.monotonic() + 3600)
+        # Gemini request per day quotas reset at midnight Pacific time
+        # which is equivalent to 8 AM UTC
+        now = datetime.now(timezone.utc)
+        target = now.replace(hour=8, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        wait_seconds = (target - now).total_seconds()
+
+        ctx.rate_limiter.timestamps.append(time.monotonic() + wait_seconds)
         api_key_exhaustion_total.inc()
 
 
