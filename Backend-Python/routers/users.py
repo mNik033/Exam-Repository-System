@@ -1,10 +1,12 @@
+import json
 import secrets
 import string
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 
-from database import otps
-from security import hash_password, verify_password, create_access_token, get_current_user, guard
+from database import otps, redis_client
+from security import hash_password, verify_password, create_access_token, get_current_user, guard, get_user_from_token_query
 from repositories import user_repo, paper_repo, question_repo
 from models.user import User, Notification
 from schemas.user import UserSignupRequest, AuthResponse, LoginRequest, ProfileResponse, UnlockAnswerResponse, SendOTPRequest
@@ -175,3 +177,30 @@ async def get_unlocked_answers(
     unlocked_set = set(current_user.unlocked_answers)
     unlocked_for_paper = [qid for qid in question_ids if qid in unlocked_set]
     return {"unlocked_answers": unlocked_for_paper}
+
+@router.get("/notifications/stream")
+async def stream_notifications(current_user: User = Depends(get_user_from_token_query)):
+    # SSE endpoint for real-time notifications
+    async def event_generator():
+        pubsub = redis_client.pubsub()
+        await pubsub.subscribe(f"{settings.REDIS_PREFIX}notifications:{current_user.id}")
+
+        try:
+            yield ": keepalive\n\n"
+
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    yield f"data: {message['data']}\n\n"
+        finally:
+            await pubsub.unsubscribe()
+            await pubsub.close()
+
+    return StreamingResponse(
+        event_generator(), 
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )

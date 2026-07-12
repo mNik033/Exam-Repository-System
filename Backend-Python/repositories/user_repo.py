@@ -1,7 +1,12 @@
+import json
+import logging
 from bson import ObjectId
 
-from database import users
+from config import settings
+from database import users, redis_client
 from models.user import User, Notification
+
+logger = logging.getLogger(__name__)
 
 async def get_user_by_email(email: str) -> User | None:
     user_dict = await users.find_one({"email": email})
@@ -62,6 +67,12 @@ async def add_notification(
             }
         }
     )
+
+    try:
+        notif_json = notification.model_dump_json()
+        await redis_client.publish(f"{settings.REDIS_PREFIX}notifications:{user_id}", notif_json)
+    except Exception as e:
+        logger.warning("Failed to publish notification to Redis: %s", e)
 
 async def get_notifications(user_id: str) -> list[Notification]:
     doc = await users.find_one(

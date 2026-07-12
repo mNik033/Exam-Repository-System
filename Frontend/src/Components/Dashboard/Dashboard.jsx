@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { useToast } from "../Toast/ToastContext";
 import FullPageSpinner from "../UI/FullPageSpinner";
 import {
@@ -9,7 +9,7 @@ import {
   Upload, Sparkles, Info,
 } from "lucide-react";
 import AuthContext from "../../Context/AuthContext";
-import { getDashboard, getNotifications, getProfile } from "../../services/api";
+import { getDashboard, getNotifications, getProfile, subscribeToNotifications } from "../../services/api";
 
 const NOTIF_STYLES = {
   success: {
@@ -76,6 +76,17 @@ export default function Dashboard() {
     };
     fetchData();
   }, [token, updateCredit, toast]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const stream = subscribeToNotifications(token, (data) => {
+      // Immediately add the new notification to the top of the list
+      setNotifications(prev => [data, ...prev]);
+    });
+
+    return () => stream.close();
+  }, [token, toast]);
 
   const formatTimeAgo = (dateStr) => {
     if (!dateStr) return "Just now";
@@ -251,36 +262,56 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div>
-                  {notifications.map((n, idx) => {
-                    const style = NOTIF_STYLES[n.type] || NOTIF_STYLES.default;
-                    const Icon = style.icon;
+                  <AnimatePresence initial={false}>
+                    {notifications.map((n, idx) => {
+                      const style = NOTIF_STYLES[n.type] || NOTIF_STYLES.default;
+                      const Icon = style.icon;
 
-                    return (
-                      <div
-                        key={idx}
-                        onClick={() => n.paper_id ? navigate(`/paper/${n.paper_id}`) : navigate("/upload")}
-                        className="list-item-hoverable notification-item"
-                      >
-                        <div
-                          className="notification-icon-wrapper"
-                          style={{
-                            background: style.bg,
-                            border: `1px solid ${style.color}`,
-                          }}
+                      return (
+                        <motion.div
+                          layout
+                          key={n.timestamp || idx}
+                          initial={{ opacity: 0, y: -20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ duration: 0.4 }}
+                          onClick={() => n.paper_id ? navigate(`/paper/${n.paper_id}`) : navigate("/upload")}
+                          className="list-item-hoverable notification-item"
+                          style={{ position: 'relative', zIndex: 0 }}
                         >
-                          <Icon size={16} style={{ color: style.color }} />
-                        </div>
-                        <div className="notification-content-wrapper">
-                          <p className="text-body-medium notification-message">
-                            {n.message}
-                          </p>
-                          <span className="text-body-small notification-time">
-                            {formatTimeAgo(n.timestamp)}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: [0, 0.5, 0, 0.5, 0] }}
+                            transition={{ duration: 2, times: [0, 0.1, 0.4, 0.7, 1], ease: "easeInOut" }}
+                            style={{
+                              position: 'absolute',
+                              inset: 0,
+                              backgroundColor: style.bg,
+                              zIndex: -1,
+                              borderRadius: 'inherit'
+                            }}
+                          />
+                          <div
+                            className="notification-icon-wrapper"
+                            style={{
+                              background: style.bg,
+                              border: `1px solid ${style.color}`,
+                            }}
+                          >
+                            <Icon size={16} style={{ color: style.color }} />
+                          </div>
+                          <div className="notification-content-wrapper">
+                            <p className="text-body-medium notification-message">
+                              {n.message}
+                            </p>
+                            <span className="text-body-small notification-time">
+                              {formatTimeAgo(n.timestamp)}
+                            </span>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
                 </div>
               )}
             </div>

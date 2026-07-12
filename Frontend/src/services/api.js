@@ -107,6 +107,21 @@ export async function getNotifications(token) {
   return request("/api/notifications", { token });
 }
 
+export function subscribeToNotifications(token, onMessageCallback) {
+  const eventSource = new EventSource(`${API_BASE}/api/notifications/stream?token=${token}`);
+
+  eventSource.onmessage = (event) => {
+    onMessageCallback(JSON.parse(event.data));
+  };
+
+  eventSource.onerror = (error) => {
+    console.error("SSE Error:", error);
+    eventSource.close();
+  };
+
+  return eventSource;
+}
+
 // ===== Courses =====
 
 export async function getCourses() {

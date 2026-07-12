@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from guard import SecurityConfig, SecurityDecorator
 import jwt
@@ -76,3 +76,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
     user_dict["_id"] = str(user_dict["_id"])
     return User(**user_dict)
+
+async def get_user_from_token_query(token: str = Query(...)) -> User:
+    # used for authenticating SSE connections
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+    return await get_current_user(credentials)
