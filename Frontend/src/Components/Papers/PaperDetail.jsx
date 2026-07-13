@@ -194,7 +194,7 @@ export default function PaperDetail() {
       toast.error(err.message || "Failed to unlock answer");
       return false;
     }
-  }, [confirm, auth, navigate, toast]);
+  }, [confirm, auth, navigate, toast, unlockCost]);
 
   if (loading) {
     return <FullPageSpinner />;
