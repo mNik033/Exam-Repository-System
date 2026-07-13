@@ -3,7 +3,8 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowLeft, Lock, Unlock, Tag, HelpCircle, Wallet,
-  ChevronDown, ChevronUp, AlertCircle, ExternalLink
+  ChevronDown, ChevronUp, AlertCircle, ExternalLink,
+  PanelLeftClose, PanelLeftOpen
 } from "lucide-react";
 import AuthContext from "../../Context/AuthContext";
 import { ConfigContext } from "../../Context/ConfigContext";
@@ -122,6 +123,7 @@ export default function PaperDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("questions");
+  const [isDocCollapsed, setIsDocCollapsed] = useState(false);
 
   const fetchDetails = useCallback(async () => {
     try {
@@ -281,11 +283,22 @@ export default function PaperDetail() {
       {/* Two-Panel Layout */}
       <div className="detail-panels-container flex-col md:flex-row">
         {/* Left — Paper */}
-        <div className={`${activeTab === "paper" ? "flex" : "hidden"} md:flex detail-left-panel`}>
+        <div className={`${activeTab === "paper" ? "flex" : "hidden"} md:flex detail-left-panel ${isDocCollapsed ? "collapsed" : ""}`}>
           <div className="detail-panel-toolbar">
-            <span className="text-label-medium detail-toolbar-label">
-              Reference Document
-            </span>
+            <div className="flex items-center gap-3">
+              <div className="hidden md:flex">
+                <button 
+                  onClick={() => setIsDocCollapsed(true)}
+                  className="icon-btn"
+                  title="Hide Document"
+                >
+                  <PanelLeftClose size={18} />
+                </button>
+              </div>
+              <span className="text-label-medium detail-toolbar-label">
+                Reference Document
+              </span>
+            </div>
             <a
               href={fileUrl} target="_blank" rel="noopener noreferrer"
               className="btn-outlined detail-external-btn"
@@ -305,11 +318,24 @@ export default function PaperDetail() {
         </div>
 
         {/* Right — Questions */}
-        <div className={`${activeTab === "questions" ? "flex" : "hidden"} md:flex detail-right-panel`}>
+        <div className={`${activeTab === "questions" ? "flex" : "hidden"} md:flex detail-right-panel ${isDocCollapsed ? "centered" : ""}`}>
           <div className="detail-questions-toolbar">
-            <h2 className="text-title-large serif-heading detail-panel-title">
-              Solutions
-            </h2>
+            <div className="flex items-center gap-3">
+              {isDocCollapsed && (
+                <div className="hidden md:flex">
+                  <button 
+                    onClick={() => setIsDocCollapsed(false)}
+                    className="icon-btn"
+                    title="Show Document"
+                  >
+                    <PanelLeftOpen size={18} />
+                  </button>
+                </div>
+              )}
+              <h2 className="text-title-large serif-heading detail-panel-title">
+                Solutions
+              </h2>
+            </div>
             <span className="badge questions-count-badge">
               {questions.length} Question{questions.length !== 1 && "s"}
             </span>
