@@ -51,6 +51,35 @@ async def find_by_course(course_id: str, sort_by_field: str | None = None, sort_
         results.append(Question(**doc))
     return results
 
+async def find_nearest_by_embedding(course_id: str, embedding: list[float]) -> tuple[Question, float] | None:
+    pipeline = [
+        {
+            "$vectorSearch": {
+                "index": "question_embedding_index",
+                "path": "embedding",
+                "queryVector": embedding,
+                "limit": 1,
+                "exact": True,
+                "filter": { "course_id": course_id }
+            }
+        },
+        {
+            "$addFields": { "score": { "$meta": "vectorSearchScore" } }
+        },
+        {
+            "$project": { "embedding": 0 }
+        }
+    ]
+
+    docs = await questions.aggregate(pipeline).to_list(length=1)
+    if not docs:
+        return None
+    
+    doc = docs[0]
+    score = doc.pop("score")
+    doc["_id"] = str(doc["_id"])
+    return (Question(**doc), score)
+
 async def create_question(question: Question) -> str:
     question_dict = question.model_dump(exclude_unset=True, exclude={"id"})
     result = await questions.insert_one(question_dict)

@@ -75,12 +75,10 @@ async def _deduplicate_questions(
 ) -> tuple[list[str | None], list[dict]]:
     # two tier deduplication against existing questions per course
     # tier 1: exact text match (fast indexed DB lookup)
-    # tier 2: cosine similarity against all course questions
+    # tier 2: DB server side exact nearest neighbour search
     
     question_ids: list[str | None] = []
     new_questions_to_generate: list[dict] = []
-
-    existing_questions = await question_repo.find_by_course(course_id)
     
     for i, q in enumerate(extracted_questions):
         question_text = q.question.strip()
@@ -92,23 +90,19 @@ async def _deduplicate_questions(
             question_ids.append(exact_match.id)
             continue
 
-        best_match = None
+        match_result = await question_repo.find_nearest_by_embedding(
+            course_id=course_id,
+            embedding=embeddings[i]
+        )
+
         best_sim = 0.0
-
-        for existing_q in existing_questions:
-            if not existing_q.embedding:
+        if match_result:
+            best_match, best_sim = match_result
+            if best_sim >= SIMILARITY_THRESHOLD:
+                logger.info("  Q%d: Similar to existing question (id=%s, sim=%.3f). Reusing.", i + 1, best_match.id, best_sim)
+                questions_reused_total.labels(match_type="cosine").inc()
+                question_ids.append(best_match.id)
                 continue
-            sim = gemini.cosine_similarity(embeddings[i], existing_q.embedding)
-
-            if sim > best_sim:
-                best_sim = sim
-                best_match = existing_q
-
-        if best_match and best_sim >= SIMILARITY_THRESHOLD:
-            logger.info("  Q%d: Similar to existing question (id=%s, sim=%.3f). Reusing.", i + 1, best_match.id, best_sim)
-            questions_reused_total.labels(match_type="cosine").inc()
-            question_ids.append(best_match.id)
-            continue
         
         logger.info("  Q%d: No match (best_sim=%.3f). Queuing for answer generation.", i + 1, best_sim)
 
