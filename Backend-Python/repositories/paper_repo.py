@@ -9,21 +9,26 @@ from database import papers
 from models.paper import Paper
 from services import storage
 
-def _decode_cursor(cursor_str: str) -> tuple[str | None, str | None, int]:
+def _decode_cursor(cursor_str: str) -> tuple[str | None, str | None, int, str | None]:
     try:
         decoded = base64.b64decode(cursor_str.encode()).decode()
+        if decoded.startswith("atlas_"):
+            return None, None, 0, decoded.split("_",1)[1]
         if decoded.startswith("text_"):
             skip_count = int(decoded.split("_")[1])
-            return None, None, skip_count
+            return None, None, skip_count, None
             
         session_year, obj_id = decoded.split("_", 1)
-        return session_year, obj_id, 0
+        return session_year, obj_id, 0, None
     except Exception:
-        return None, None, 0
+        return None, None, 0, None
 
 def _encode_cursor(session_year: str, obj_id: str) -> str:
     token = f"{session_year}_{obj_id}"
     return base64.b64encode(token.encode()).decode()
+
+def _encode_atlas_cursor(token: str) -> str:
+    return base64.b64encode(f"atlas_{token}".encode()).decode()
 
 def _encode_text_cursor(skip: int) -> str:
     token = f"text_{skip}"
@@ -47,26 +52,67 @@ async def get_all_papers(
     cursor: str | None = None,
     limit: int = 10
 ) -> tuple[list[Paper], str | None]:
-    query = {}
+    filter_query = {}
     
     if exam_type:
-        query["exam_type"] = exam_type
+        filter_query["exam_type"] = exam_type
     if session_year:
-        query["session_year"] = session_year
+        filter_query["session_year"] = session_year
     if course_id:
-        query["course_id"] = course_id
+        filter_query["course_id"] = course_id
 
-    last_year, last_id, skip = None, None, 0
+    last_year, last_id, skip, atlas_token = None, None, 0, None
     if cursor:
-        last_year, last_id, skip = _decode_cursor(cursor)
-    
-    if q:
-        regex_query = {"$regex": re.escape(q), "$options": "i"}
-        query["$or"] = [
-            {"title": regex_query},
-            {"tags": regex_query}
+        last_year, last_id, skip, atlas_token = _decode_cursor(cursor)
+
+    # MongoDB Atlas Search (relevance ranked)
+    if q and len(q.strip()) >= 3:
+        pipeline = [
+            {
+                "$search": {
+                    "index": "paper_search_index",
+                    "compound": {
+                        "should": [
+                            {"text": {"query": q, "path": "title", "score": {"boost": {"value": 3}}}},
+                            {"text": {"query": q, "path": "tags"}}
+                        ]
+                    }
+                }
+            }
         ]
 
+        if atlas_token:
+            pipeline[0]["$search"]["searchAfter"] = atlas_token
+        
+        if filter_query:
+            pipeline.append({"$match": filter_query})
+
+        pipeline.extend([
+            {"$addFields": {
+                "score": {"$meta": "searchScore"},
+                "search_token": {"$meta": "searchSequenceToken"}
+            }},
+            {"$limit": limit + 1}
+        ])
+
+        results = []
+        prev_token, curr_token = None, None
+        async for doc in papers.aggregate(pipeline):
+            doc.pop("score", None)
+            prev_token = curr_token
+            curr_token = doc.pop("search_token", None)
+            doc["_id"] = str(doc["_id"])
+            results.append(Paper(**doc))
+
+        next_cursor = None
+        if len(results) > limit:
+            results.pop()
+            if prev_token:
+                next_cursor = _encode_atlas_cursor(prev_token)
+
+        return results, next_cursor
+
+    # Fallback to regular find query, if no search query provided
     if last_year and last_id:
         cursor_clause = {
             "$or": [
@@ -74,12 +120,12 @@ async def get_all_papers(
                 {"session_year": last_year, "_id": {"$lt": ObjectId(last_id)}}
             ]
         }
-        if "$or" in query:
-            query = {"$and": [{"$or": query["$or"]}, cursor_clause]}
+        if filter_query:
+            filter_query = {"$and": [filter_query, cursor_clause]}
         else:
-            query.update(cursor_clause)
+            filter_query = cursor_clause
 
-    db_cursor = papers.find(query).sort([("session_year", -1), ("_id", -1)]).limit(limit + 1)
+    db_cursor = papers.find(filter_query).sort([("session_year", -1), ("_id", -1)]).limit(limit + 1)
 
     results = []
     async for doc in db_cursor:

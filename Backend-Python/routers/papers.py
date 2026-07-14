@@ -67,7 +67,7 @@ async def get_papers(
     
     # if a search query is active, find and attach matching questions
     papers_with_matches = []
-    if q and papers_list:
+    if q and len(q.strip()) >= 3 and papers_list:
         all_q_ids = [q_id for paper in papers_list for q_id in paper.question_ids]
 
         all_questions = await question_repo.get_questions_by_ids(all_q_ids)

@@ -227,7 +227,7 @@ export default function PapersList() {
           <input
             id="papers-search"
             type="text"
-            placeholder="Search by paper title, tags, or question text..."
+            placeholder="Search paper titles or topics (e.g., 'Operating Systems', 'Recursion')..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="input-field search-input-field"
