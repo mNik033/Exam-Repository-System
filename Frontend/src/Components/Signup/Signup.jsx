@@ -375,12 +375,20 @@ export default function Signup() {
           )}
 
           {/* Footnote */}
-          <p className="auth-footnote">
-            Already have access?{" "}
-            <Link to="/login" className="auth-footnote-link">
-              Sign In
-            </Link>
-          </p>
+          <div style={{ textAlign: "center", marginTop: "24px" }}>
+            <p className="auth-footnote" style={{ marginBottom: "12px", fontSize: "0.75rem", opacity: 0.8 }}>
+              By signing up, you agree to our{" "}
+              <Link to="/terms-of-service" className="auth-footnote-link">Terms of Service</Link>
+              {" "}and{" "}
+              <Link to="/privacy-policy" className="auth-footnote-link">Privacy Policy</Link>.
+            </p>
+            <p className="auth-footnote" style={{ margin: 0.5 }}>
+              Already have access?{" "}
+              <Link to="/login" className="auth-footnote-link">
+                Sign In
+              </Link>
+            </p>
+          </div>
         </div>
       </motion.div>
 

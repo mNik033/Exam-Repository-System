@@ -26,8 +26,8 @@ export default function Footer() {
         {/* Footer Navigation */}
         <div className="footer-nav">
           {[
-            { to: "#", label: "Privacy Policy" },
-            { to: "#", label: "Terms of Service" },
+            { to: "/privacy-policy", label: "Privacy Policy" },
+            { to: "/terms-of-service", label: "Terms of Service" },
           ].map((link) => (
             <Link
               key={link.label}

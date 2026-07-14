@@ -21,6 +21,7 @@ import Dashboard from "./Components/Dashboard/Dashboard";
 import PapersList from "./Components/Papers/PapersList";
 import PaperDetail from "./Components/Papers/PaperDetail";
 import AboutUs from "./Components/AboutUs/AboutUs";
+import LegalDocument from "./Components/Legal/LegalDocument";
 import ErrorBoundary from "./Components/UI/ErrorBoundary";
 
 const ProtectedRoute = ({ children }) => {
@@ -77,6 +78,8 @@ export default function App() {
                           <Route path="/login" element={<Login />} />
                           <Route path="/subscription" element={<Subscription />} />
                           <Route path="/aboutUs" element={<AboutUs />} />
+                          <Route path="/privacy-policy" element={<LegalDocument type="privacy" />} />
+                          <Route path="/terms-of-service" element={<LegalDocument type="terms" />} />
                           {/* Catch-all redirects to home hero page */}
                           <Route path="/*" element={<Navigate to="/" replace />} />
                         </>
@@ -89,6 +92,8 @@ export default function App() {
                           <Route path="/papers" element={<PapersList />} />
                           <Route path="/paper/:id" element={<PaperDetail />} />
                           <Route path="/aboutUs" element={<AboutUs />} />
+                          <Route path="/privacy-policy" element={<LegalDocument type="privacy" />} />
+                          <Route path="/terms-of-service" element={<LegalDocument type="terms" />} />
                           {/* Catch-all redirects to dashboard */}
                           <Route path="/*" element={<Navigate to="/" replace />} />
                         </>
