@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
 import { Search, FileText, Clock, Tag, ChevronRight, Sparkles, X } from "lucide-react";
 import AuthContext from "../../Context/AuthContext";
@@ -106,13 +106,14 @@ function CustomDropdown({ label, options, selected, onChange, searchable = false
 export default function PapersList() {
   const auth = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
   
   const [papers, setPapers] = useState([]);
   const [cursor, setCursor] = useState(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [search, setSearch] = useState(location.state?.search || "");
+  const [debouncedSearch, setDebouncedSearch] = useState(location.state?.search || "");
   const [initialLoad, setInitialLoad] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
 

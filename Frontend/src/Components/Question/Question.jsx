@@ -251,7 +251,12 @@ export default function QuestionList() {
                               <span
                                 key={idx}
                                 className="badge"
-                                style={{ fontSize: "0.65rem", background: "var(--md-surface-container-high)", color: "var(--md-on-surface-variant)", border: "none" }}
+                                style={{ fontSize: "0.65rem", background: "var(--md-surface-container-high)", color: "var(--md-on-surface-variant)", border: "none", cursor: "pointer", position: "relative", zIndex: 50 }}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  navigate('/papers', { state: { search: q.tag } });
+                                }}
                               >
                                 {q.tag}
                               </span>
@@ -360,8 +365,16 @@ export default function QuestionList() {
                       </div>
 
                       {qa.tag && (
-                        <div style={{ marginTop: 16, display: "flex" }}>
-                          <span className="badge" style={{ fontSize: "0.65rem", background: "var(--md-surface-container-highest)", border: "none" }}>
+                        <div style={{ marginTop: 16, display: "flex", position: "relative", zIndex: 50 }}>
+                          <span 
+                            className="badge" 
+                            style={{ fontSize: "0.65rem", background: "var(--md-surface-container-highest)", border: "none", cursor: "pointer", position: "relative", zIndex: 50 }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              navigate('/papers', { state: { search: qa.tag } });
+                            }}
+                          >
                             Tag: {qa.tag}
                           </span>
                         </div>

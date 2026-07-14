@@ -22,6 +22,7 @@ import "katex/dist/katex.min.css";
 
 const QuestionCard = React.memo(({ q, index, handleUnlock }) => {
   const { unlockCost } = useContext(ConfigContext);
+  const navigate = useNavigate();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isQuestionExpanded, setIsQuestionExpanded] = useState(false);
   
@@ -41,7 +42,14 @@ const QuestionCard = React.memo(({ q, index, handleUnlock }) => {
           Q{index + 1}
         </span>
         {q.tag && (
-          <span className="badge">
+          <span 
+            className="badge" 
+            style={{ cursor: "pointer" }}
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate('/papers', { state: { search: q.tag } });
+            }}
+          >
             <Tag size={10} className="tag-icon" /> {q.tag}
           </span>
         )}
