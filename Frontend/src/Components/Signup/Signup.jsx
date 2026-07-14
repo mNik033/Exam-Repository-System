@@ -1,7 +1,7 @@
-import React, { useContext, useState, useEffect } from "react";
+import React, { useContext, useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion } from "motion/react";
-import { GraduationCap, ArrowRight } from "lucide-react";
+import { GraduationCap, ArrowRight, X, RotateCcw } from "lucide-react";
 import AuthContext from "../../Context/AuthContext";
 import AuthSidebar from "../Login/AuthSidebar";
 import { ConfigContext } from "../../Context/ConfigContext";
@@ -9,6 +9,75 @@ import { useToast } from "../Toast/ToastContext";
 import { signup as signupApi, getCourses, sendOtp } from "../../services/api";
 import Input from "../UI/Input";
 import Button from "../UI/Button";
+
+function SearchableCourseDropdown({ courses, selectedCourses, onSelect }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchVal, setSearchVal] = useState("");
+  const dropdownRef = useRef(null);
+
+  const availableCourses = courses.filter(c => !selectedCourses.includes(c._id));
+  const filteredCourses = availableCourses.filter(c =>
+    `${c.code} ${c.name}`.toLowerCase().includes(searchVal.toLowerCase())
+  );
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={dropdownRef} style={{ position: 'relative', width: '100%' }}>
+      <div
+        className="input-field signup-course-select"
+        style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: 'var(--md-on-surface-variant)' }}
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span>Select Course</span>
+      </div>
+
+      {isOpen && (
+        <div className="custom-dropdown-menu">
+          <div className="custom-dropdown-search-wrapper">
+            <input
+              type="text"
+              className="input-field custom-dropdown-search"
+              placeholder="Search by course code or name..."
+              value={searchVal}
+              onChange={e => setSearchVal(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className="custom-dropdown-options hide-scrollbar" style={{ maxHeight: '200px' }}>
+            {filteredCourses.length === 0 ? (
+              <div style={{ padding: '10px 14px', fontSize: '13px', color: 'var(--md-on-surface-variant)' }}>No courses found</div>
+            ) : (
+              filteredCourses.map(c => (
+                <button
+                  type="button"
+                  key={c._id}
+                  className="custom-dropdown-option"
+                  onClick={() => {
+                    onSelect(c._id);
+                    setIsOpen(false);
+                    setSearchVal("");
+                  }}
+                  style={{ textAlign: 'left', border: 'none', background: 'none', width: '100%' }}
+                >
+                  {c.code} — {c.name}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -21,7 +90,7 @@ export default function Signup() {
   const [formData, setFormData] = useState({
     name: "", email: "", password: "", referral_code: "",
   });
-  const [selectedCourses, setSelectedCourses] = useState([""]);
+  const [selectedCourses, setSelectedCourses] = useState([]);
   const [coursesData, setCoursesData] = useState([]);
 
   const [step, setStep] = useState("form");
@@ -96,14 +165,8 @@ export default function Signup() {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   }
 
-  const handleCourseChange = (index, e) => {
-    const courseId = e.target.value;
-    const newCourses = [...selectedCourses];
-    newCourses[index] = courseId;
-    setSelectedCourses(newCourses);
-    if (courseId && index === newCourses.length - 1 && newCourses.length < 5) {
-      setSelectedCourses((prev) => [...prev, ""]);
-    }
+  const removeCourse = (id) => {
+    setSelectedCourses(selectedCourses.filter(c => c !== id));
   };
 
   async function handleSubmit(e) {
@@ -176,31 +239,42 @@ export default function Signup() {
 
               {/* Courses select */}
               <div>
-                <label className="input-label" style={{ display: "block", marginBottom: 8 }}>
-                  ENROLLED COURSES
-                </label>
-                {selectedCourses.map((courseId, index) => (
-                  <select
-                    key={index}
-                    id={`signup-course-${index}`}
-                    value={courseId}
-                    onChange={(e) => handleCourseChange(index, e)}
-                    className="input-field signup-course-select"
-                    style={{
-                      color: courseId ? "var(--md-on-background)" : "var(--md-on-surface-variant)",
-                    }}
-                  >
-                    <option value="">Select Course</option>
-                    {coursesData.map((c) => {
-                      const isSelectedElsewhere = selectedCourses.includes(c._id) && c._id !== courseId;
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <label className="input-label" style={{ marginBottom: 0 }}>
+                    ENROLLED COURSES
+                  </label>
+                </div>
+
+                {selectedCourses.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                    {selectedCourses.map((courseId) => {
+                      const c = coursesData.find(x => x._id === courseId);
+                      if (!c) return null;
                       return (
-                        <option key={c._id} value={c._id} disabled={isSelectedElsewhere}>
-                          {c.code} — {c.name}
-                        </option>
+                        <div key={courseId} className="badge badge-primary" style={{ padding: '6px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'default' }}>
+                          {c.code}
+                          <X
+                            size={14}
+                            style={{ cursor: 'pointer', opacity: 0.8 }}
+                            onClick={() => removeCourse(courseId)}
+                          />
+                        </div>
                       );
                     })}
-                  </select>
-                ))}
+                  </div>
+                )}
+
+                {selectedCourses.length < 5 && (
+                  <SearchableCourseDropdown
+                    courses={coursesData}
+                    selectedCourses={selectedCourses}
+                    onSelect={(courseId) => {
+                      if (!selectedCourses.includes(courseId)) {
+                        setSelectedCourses([...selectedCourses, courseId]);
+                      }
+                    }}
+                  />
+                )}
               </div>
 
               {/* Referral code */}
