@@ -3695,6 +3695,48 @@ body[data-theme='dark'] .sec-2-card-2-icon-box {
   flex: 1;
 }
 
+@property --bg-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes search-spin {
+  0% { --bg-angle: 0deg; }
+  100% { --bg-angle: 360deg; }
+}
+
+.search-field-wrap.is-loading {
+  z-index: 1;
+}
+
+.search-field-wrap.is-loading .search-input-field {
+  border-color: transparent;
+  background-clip: padding-box;
+}
+
+.search-field-wrap.is-loading::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: var(--shape-full);
+  background: conic-gradient(from var(--bg-angle), transparent 50%, var(--md-primary) 100%);
+  animation: search-spin 1.5s linear infinite;
+}
+
+.search-field-wrap.is-loading::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -2;
+  border-radius: var(--shape-full);
+  background: conic-gradient(from var(--bg-angle), transparent 50%, var(--md-primary) 100%);
+  animation: search-spin 1.5s linear infinite;
+  filter: blur(8px);
+  opacity: 0.5;
+}
+
 /* ── Mobile Filter Toggle ── */
 .mobile-filter-toggle {
   display: none;

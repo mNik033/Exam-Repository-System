@@ -274,7 +274,7 @@ export default function PapersList() {
         {/* Sticky Search Bar */}
         <div className="search-bar-sticky">
           <div className="search-bar-inner">
-            <div className="search-field-wrap">
+            <div className={`search-field-wrap ${isFetching && !initialLoad ? 'is-loading' : ''}`}>
               <Search size={18} className="search-icon-overlay" />
               <input
                 id="papers-search"
@@ -306,12 +306,6 @@ export default function PapersList() {
             </button>
           </div>
 
-          {/* Loading bar */}
-          {isFetching && !initialLoad && (
-            <div className="search-loading-bar sticky-loading">
-              <div className="search-loading-bar-inner" />
-            </div>
-          )}
         </div>
 
         {/* ─── Main Layout: Sidebar + Results ─── */}
