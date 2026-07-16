@@ -62,6 +62,9 @@ export default function Subscription() {
     });
 
   const handlePurchase = async (plan) => {
+    toast.info("Payments are temporarily disabled while we transition to live mode.");
+    return;
+
     if (!auth.isLoggedIn || !auth.token) {
       toast.warning("Please sign in to purchase credits.");
       navigate("/login");

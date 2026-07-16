@@ -45,6 +45,8 @@ async def get_plans():
 @router.post("/makePayment")
 @guard.rate_limit(requests=10, window=60)
 async def make_payment(payload: MakePaymentRequest,current_user: User = Depends(get_current_user)):
+    raise HTTPException(status_code=503, detail="Payments are temporarily disabled while we transition to live mode.")
+    
     if payload.amount not in CREDIT_MAP:
         raise HTTPException(status_code=400, detail="Invalid payment amount")
 
