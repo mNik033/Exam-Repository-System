@@ -66,6 +66,9 @@ app = FastAPI(
     title="Exam Repository System",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if settings.ENVIRONMENT == "dev" else None,
+    redoc_url="/redoc" if settings.ENVIRONMENT == "dev" else None,
+    openapi_url="/openapi.json" if settings.ENVIRONMENT == "dev" else None,
 )
 
 app.add_middleware(

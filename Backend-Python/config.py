@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     UNLOCK_COST: int = 5
     PROMETHEUS_TOKEN: str | None = None
     INSTITUTE_DOMAIN: str | None = None
+    ENVIRONMENT: str = "prod"
 
     # Redis Configuration
     REDIS_URL: str
