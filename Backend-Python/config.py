@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     PROMETHEUS_TOKEN: str | None = None
     INSTITUTE_DOMAIN: str | None = None
     ENVIRONMENT: str = "prod"
+    ALLOWED_ORIGINS: str = ""
 
     # Redis Configuration
     REDIS_URL: str
@@ -33,6 +34,10 @@ class Settings(BaseSettings):
     @property
     def gemini_api_key_list(self) -> list[str]:
         return [k.strip() for k in self.GEMINI_API_KEYS.split(",") if k.strip()]
+
+    @property
+    def allowed_origin_list(self) -> list[str]:
+        return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
