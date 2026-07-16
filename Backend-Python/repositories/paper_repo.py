@@ -73,8 +73,8 @@ async def get_all_papers(
                     "index": "paper_search_index",
                     "compound": {
                         "should": [
-                            {"text": {"query": q, "path": "title", "score": {"boost": {"value": 3}}}},
-                            {"text": {"query": q, "path": "tags"}}
+                            {"text": {"query": q, "path": "title", "fuzzy": {"maxEdits": 1}, "score": {"boost": {"value": 3}}}},
+                            {"text": {"query": q, "path": "tags", "fuzzy": {"maxEdits": 1}}}
                         ]
                     }
                 }
