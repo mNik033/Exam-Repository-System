@@ -216,7 +216,7 @@ export default function Dashboard() {
                     onClick={() => navigate(`/paper/${paper._id}`)}
                   >
                     <h3 className="serif-heading recommended-paper-title">
-                      {paper.title || "Untitled Paper"}
+                      {paper.title ? paper.title.split(' - ')[0] : "Untitled Paper"}
                     </h3>
                     <div className="card-tags-row">
                       <span className="badge badge-primary">{paper.session} {paper.session_year}</span>
