@@ -149,7 +149,7 @@ def track_gemini_latency(operation: str):
             
             if target_model is not None:
                 from services.gemini import ANSWER_MODELS
-                model = ANSWER_MODELS.get(target_model, "unknown")
+                model = ANSWER_MODELS[target_model].name if target_model in ANSWER_MODELS else "unknown"
             else:
                 model = "none"
             

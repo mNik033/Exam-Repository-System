@@ -387,9 +387,9 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
         return
 
     start_time = time.time()
-    for _ in range(len(gemini.api_key_pool.contexts)):
+    for _ in range(len(gemini.ANSWER_MODELS[DEFAULT_ANSWER_MODEL].pool.contexts)):
         try:
-            api_context = gemini.api_key_pool.acquire()
+            api_context = gemini.ANSWER_MODELS[DEFAULT_ANSWER_MODEL].pool.acquire()
         except gemini.AllKeysExhaustedError:
             break
             
@@ -409,7 +409,7 @@ async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
             )
             return
         except gemini.DailyQuotaExhaustedError:
-            gemini.api_key_pool.mark_exhausted(api_context)
+            gemini.ANSWER_MODELS[DEFAULT_ANSWER_MODEL].pool.mark_exhausted(api_context)
             continue
         except Exception:
             paper_processing_total.labels(status="failed", failure_reason="unknown_error").inc()

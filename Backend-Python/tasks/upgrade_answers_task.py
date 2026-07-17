@@ -19,7 +19,7 @@ async def run_upgrade_batch():
         return
     
     try:
-        api_context = gemini.api_key_pool.acquire()
+        api_context = gemini.ANSWER_MODELS[TARGET_MODEL].pool.acquire()
     except gemini.AllKeysExhaustedError:
         logger.warning("No API keys available for background upgrade. Try again later.")
         return
@@ -80,9 +80,9 @@ async def run_upgrade_batch():
 
         except gemini.DailyQuotaExhaustedError:
             logger.warning("Key hit daily quota. Switching to next key...")
-            gemini.api_key_pool.mark_exhausted(api_context)
+            gemini.ANSWER_MODELS[TARGET_MODEL].pool.mark_exhausted(api_context)
             try:
-                api_context = gemini.api_key_pool.acquire()
+                api_context = gemini.ANSWER_MODELS[TARGET_MODEL].pool.acquire()
             except gemini.AllKeysExhaustedError:
                 logger.error("All keys exhausted. Stopping upgrade batch.")
                 break

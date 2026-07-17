@@ -120,14 +120,24 @@ class ApiKeyPool:
 
 # ── Module Configuration ──────────────────────────────────────────────
 
+@dataclass
+class GeminiModelConfig:
+    name: str
+    pool: ApiKeyPool
+
 ANSWER_MODELS = {
-    1: "gemini-3.1-flash-lite",
-    2: "gemini-3.5-flash"
+    1: GeminiModelConfig(
+        name="gemini-3.1-flash-lite",
+        pool=ApiKeyPool(api_keys=settings.gemini_api_key_list, rpm_per_key=15)
+    ),
+    2: GeminiModelConfig(
+        name="gemini-3.5-flash",
+        pool=ApiKeyPool(api_keys=settings.gemini_api_key_list, rpm_per_key=5)
+    )
 }
 EMBEDDINGS_MODEL = "gemini-embedding-001"
 
-api_key_pool = ApiKeyPool(api_keys=settings.gemini_api_key_list)
-api_keys_available.set_function(api_key_pool._count_available_keys)
+api_keys_available.set_function(ANSWER_MODELS[1].pool._count_available_keys)
 
 # ── Prompt Templates ──────────────────────────────────────────────────
 
@@ -228,7 +238,7 @@ async def create_context_cache(
     try:
         logger.info("Creating Context Cache for %s ...", file_uri)
         cache = await client.aio.caches.create(
-            model=f"models/{ANSWER_MODELS[target_model]}",
+            model=f"models/{ANSWER_MODELS[target_model].name}",
             config=types.CreateCachedContentConfig(
                 contents=[
                     types.Content(
@@ -288,7 +298,7 @@ async def extract_paper_data(
     response = await _call_with_retry(
         client.aio.models.generate_content,
         limiter,
-        model=ANSWER_MODELS[target_model],
+        model=ANSWER_MODELS[target_model].name,
         contents=contents,
         config=config
     )
@@ -425,7 +435,7 @@ async def generate_single_answer(
         response = await _call_with_retry(
             client.aio.models.generate_content,
             limiter,
-            model=ANSWER_MODELS[target_model],
+            model=ANSWER_MODELS[target_model].name,
             contents=contents,
             config=config
         )
