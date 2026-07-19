@@ -20,7 +20,7 @@ from services.metrics import (
 
 logger = logging.getLogger(__name__)
 
-SIMILARITY_THRESHOLD = 0.85
+SIMILARITY_THRESHOLD = 0.87
 DEFAULT_ANSWER_MODEL = 1
 DEFAULT_EMBEDDING_MODEL = 1
 
