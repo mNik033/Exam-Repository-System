@@ -258,7 +258,8 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
             course_id=course.id,
             session=extracted_data.session,
             session_year=extracted_data.sessionYear,
-            exam_type=extracted_data.examType
+            exam_type=extracted_data.examType,
+            suffix=extracted_data.suffix
         )
 
         if duplicate_paper_id:
@@ -326,9 +327,10 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
                 question_ids[item["index"]] = inserted_ids[idx]
 
         # Step 10: move file and save paper
-        target_name = f"{course.code}_{extracted_data.sessionYear}_{extracted_data.session}_{extracted_data.examType}".replace(" ", "_").replace("/", "-")
+        suffix = f" {extracted_data.suffix}" if extracted_data.suffix else ""
+        target_name = f"{course.code}_{extracted_data.sessionYear}_{extracted_data.session}_{extracted_data.examType}{suffix}".replace(" ", "_").replace("/", "-")
         perm_key = await _move_to_permanent_storage(file_path, target_name)
-        paper_title = f"[{course.code}] {course.name} - {extracted_data.examType} ({extracted_data.session} {extracted_data.sessionYear})"
+        paper_title = f"[{course.code}] {course.name} - {extracted_data.examType}{suffix} ({extracted_data.session} {extracted_data.sessionYear})"
 
         all_tags = list({q.tag for q in extracted_data.questions if q.tag})
 
@@ -340,6 +342,7 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
             session=extracted_data.session,
             session_year=extracted_data.sessionYear,
             exam_type=extracted_data.examType,
+            suffix=extracted_data.suffix,
             question_ids=question_ids,
             tags=all_tags,
             processing_model=DEFAULT_ANSWER_MODEL

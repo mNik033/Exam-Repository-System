@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from google import genai
 from google.genai import types
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Callable, Any, Coroutine
 
 from config import settings
@@ -199,7 +199,24 @@ class PaperExtraction(BaseModel):
             "Normalize any variation (e.g., 'Mid SEMESTER')."
         )
     )
+    suffix: int | None = Field(
+        default=None,
+        description=(
+            "The numerical identifier if the exam is a Quiz or Assignment "
+            "(must be 1 or 2; e.g., for 'Quiz 2', this is 2). "
+            "For 'Midsem' or 'Endsem', this MUST always be None."
+        )
+    )
     questions: list[QuestionExtraction]
+
+    @model_validator(mode="after")
+    def enforce_suffix_rules(self):
+        if self.examType in ["Midsem", "Endsem"]:
+            self.suffix = None
+        elif self.examType in ["Quiz", "Assignment"]:
+            if self.suffix not in (1, 2):
+                self.suffix = 1
+        return self
 
 class AnswerExtraction(BaseModel):
     answer: str = Field(

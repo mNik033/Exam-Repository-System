@@ -10,6 +10,7 @@ class Paper(BaseModel):
     session: str
     session_year: str
     exam_type: str
+    suffix: int | None = None
     question_ids: list[str] = []
     tags: list[str] = []
     processing_model: int = 1

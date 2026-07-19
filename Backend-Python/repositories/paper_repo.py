@@ -156,12 +156,13 @@ async def get_question_ids(paper_id: str) -> list[str] | None:
         return None
     return doc.get("question_ids", [])
 
-async def exists_paper(course_id: str, session: str, session_year: str, exam_type: str) -> str | None:
+async def exists_paper(course_id: str, session: str, session_year: str, exam_type: str, suffix: int | None) -> str | None:
     paper = await papers.find_one({
         "course_id": course_id,
         "session": session,
         "session_year": session_year,
-        "exam_type": exam_type
+        "exam_type": exam_type,
+        "suffix": suffix
     }, projection={"_id": 1})
 
     return str(paper["_id"]) if paper else None
@@ -206,6 +207,7 @@ async def create_paper(
     session: str,
     session_year: str,
     exam_type: str,
+    suffix: int | None,
     question_ids: list[str],
     tags: list[str],
     processing_model: int,
@@ -218,6 +220,7 @@ async def create_paper(
         "session": session,
         "session_year": session_year,
         "exam_type": exam_type,
+        "suffix": suffix,
         "question_ids": question_ids,
         "tags": tags,
         "processing_model": processing_model,
