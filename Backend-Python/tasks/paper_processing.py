@@ -342,6 +342,7 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
         paper_id = await paper_repo.create_paper(
             title=paper_title,
             file_path=perm_key,
+            file_hash=file_hash,
             course_id=course.id,
             uploaded_by=user_id,
             session=extracted_data.session,

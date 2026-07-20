@@ -5,6 +5,7 @@ class Paper(BaseModel):
     id: str | None = Field(default=None, alias="_id")
     title: str
     file_path: str
+    file_hash: str
     course_id: str
     uploaded_by: str
     session: str

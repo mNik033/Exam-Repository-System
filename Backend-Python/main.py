@@ -25,6 +25,7 @@ from repositories.course_repo import ensure_course_indexes
 from services.storage import storage
 
 from tasks.paper_processing import process_uploaded_paper_task
+from tasks.watchdog import listen_for_dead_workers
 from tasks import upgrade_answers_task
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,9 @@ async def lifespan(app: FastAPI):
     print("Connected to Redis")
     
     await otps.create_index([("created_at", 1)], expireAfterSeconds=300)
+
+    # start watchdog for crashed background workers
+    asyncio.create_task(listen_for_dead_workers())
 
     # try upgrading answers to a better model
     upgrade_task = asyncio.create_task(

@@ -147,6 +147,13 @@ async def get_paper_by_id(paper_id: str) -> Paper | None:
     doc["_id"] = str(doc["_id"])
     return Paper(**doc)
 
+async def get_paper_by_hash(file_hash: str) -> Paper | None:
+    doc = await papers.find_one({"file_hash": file_hash})
+    if not doc:
+        return None
+    doc["_id"] = str(doc["_id"])
+    return Paper(**doc)
+
 async def get_question_ids(paper_id: str) -> list[str] | None:
     doc = await papers.find_one(
         {"_id": ObjectId(paper_id)},
