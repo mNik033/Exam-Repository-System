@@ -279,52 +279,57 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
         question_texts = [q.question for q in extracted_data.questions]
         embeddings = await _generate_embeddings(question_texts, client)
 
-        # Step 7: two-tier deduplication
-        logger.info("Step 7: Running deduplication (threshold=%.2f)...", SIMILARITY_THRESHOLD)
-        question_ids, new_questions = await _deduplicate_questions(
-            course_id=course.id,
-            extracted_questions=extracted_data.questions,
-            embeddings=embeddings,
-            course_code=course.code
-        )
+        # Course-level lock to prevent duplicate question generation during concurrent uploads
+        lock_key = f"{settings.REDIS_PREFIX}:lock:question_dedup_course:{course.id}"
+        logger.info("Waiting for course lock %s...", lock_key)
 
-        # Step 8: generate answers for new questions
-        if new_questions:
-            new_texts = [item["question_text"] for item in new_questions]
-            logger.info("Step 8: Generating answers for %d new questions...", len(new_texts))
-            answers, failed_indices = await gemini.generate_answers_parallel(
-                ques_texts=new_texts,
-                file_uri=file_uri,
-                mime_type=mime_type,
-                client=client,
-                limiter=limiter,
-                cache_name=cache_name,
-                target_model=DEFAULT_ANSWER_MODEL,
+        async with redis_client.lock(lock_key, timeout=240):
+            # Step 7: two-tier deduplication
+            logger.info("Step 7: Running deduplication (threshold=%.2f)...", SIMILARITY_THRESHOLD)
+            question_ids, new_questions = await _deduplicate_questions(
+                course_id=course.id,
+                extracted_questions=extracted_data.questions,
+                embeddings=embeddings,
+                course_code=course.code
             )
-        
-            if failed_indices:
-                raise Exception(f"Failed to generate answers for {len(failed_indices)} questions.")
 
-        # Step 9: save new questions to db
-        if new_questions:
-            logger.info("Step 9: Saving %d new questions...", len(new_questions))
-            questions_to_insert = [
-                Question(
-                    question_text=item["question_text"],
-                    answer_text=answers[idx],
-                    tag=item["tag"],
-                    course_id=course.id,
-                    embedding=item["embedding"],
-                    answer_model=DEFAULT_ANSWER_MODEL,
-                    embedding_model=DEFAULT_EMBEDDING_MODEL
+            # Step 8: generate answers for new questions
+            if new_questions:
+                new_texts = [item["question_text"] for item in new_questions]
+                logger.info("Step 8: Generating answers for %d new questions...", len(new_texts))
+                answers, failed_indices = await gemini.generate_answers_parallel(
+                    ques_texts=new_texts,
+                    file_uri=file_uri,
+                    mime_type=mime_type,
+                    client=client,
+                    limiter=limiter,
+                    cache_name=cache_name,
+                    target_model=DEFAULT_ANSWER_MODEL,
                 )
-                for idx, item in enumerate(new_questions)
-            ]
-            inserted_ids = await question_repo.create_questions_bulk(questions_to_insert)
-            questions_created_total.inc(len(questions_to_insert))
+            
+                if failed_indices:
+                    raise Exception(f"Failed to generate answers for {len(failed_indices)} questions.")
 
-            for idx, item in enumerate(new_questions):
-                question_ids[item["index"]] = inserted_ids[idx]
+            # Step 9: save new questions to db
+            if new_questions:
+                logger.info("Step 9: Saving %d new questions...", len(new_questions))
+                questions_to_insert = [
+                    Question(
+                        question_text=item["question_text"],
+                        answer_text=answers[idx],
+                        tag=item["tag"],
+                        course_id=course.id,
+                        embedding=item["embedding"],
+                        answer_model=DEFAULT_ANSWER_MODEL,
+                        embedding_model=DEFAULT_EMBEDDING_MODEL
+                    )
+                    for idx, item in enumerate(new_questions)
+                ]
+                inserted_ids = await question_repo.create_questions_bulk(questions_to_insert)
+                questions_created_total.inc(len(questions_to_insert))
+
+                for idx, item in enumerate(new_questions):
+                    question_ids[item["index"]] = inserted_ids[idx]
 
         # Step 10: move file and save paper
         suffix = f" {extracted_data.suffix}" if extracted_data.suffix else ""
