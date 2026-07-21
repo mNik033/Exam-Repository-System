@@ -209,6 +209,7 @@ async def get_recent_papers(limit: int = 10) -> list[Paper]:
 async def create_paper(
     title: str,
     file_path: str,
+    file_hash: str,
     course_id: str,
     uploaded_by: str,
     session: str,
@@ -222,6 +223,7 @@ async def create_paper(
     paper_doc = {
         "title": title,
         "file_path": file_path,
+        "file_hash": file_hash,
         "course_id": course_id,
         "uploaded_by": uploaded_by,
         "session": session,
