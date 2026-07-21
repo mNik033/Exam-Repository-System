@@ -173,7 +173,11 @@ class CourseExtraction(BaseModel):
 
 class QuestionExtraction(BaseModel):
     question: str = Field(
-        description="The question text, captured exactly as it appears in the exam paper."
+        description=(
+            "The question text, captured exactly as it appears in the exam paper. "
+            "If it is a sub-part, include its main question number in the label (e.g., '1(a) <question>'). "
+            "Strip trailing mark indicators (e.g., '(5 marks)', '[5M]', '(2+3)')."
+        )
     )
     tag: str = Field(
         description=(
