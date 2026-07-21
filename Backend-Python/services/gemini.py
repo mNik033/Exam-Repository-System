@@ -228,10 +228,39 @@ class AnswerExtraction(BaseModel):
         description=(
             "Generate an exceptionally detailed and comprehensive answer, suitable for "
             "a student aiming for deep understanding. Use markdown formatting: bullet "
-            "points, numbered lists, math formulas (LaTeX with markdown), and logical "
-            "headings/subheadings (### Heading) to structure the answer."
+            "points, numbered lists, and logical headings/subheadings (### Heading) "
+            "to structure the answer. CRITICAL: For math formulas, you MUST strictly "
+            "use $ for inline math (e.g. $x^2$) and $$ for block math. Do NOT use \\( or \\[."
         )
     )
+
+    @model_validator(mode="after")
+    def sanitize_latex(self):
+        # JSON parsing corrupts raw LaTeX commands (\frac -> [Form Feed]rac) making them unrenderable.
+        # Restore double backslashes for frontend KaTeX renderer.
+        replacements = {
+            "\frac": "\\frac",
+            "\bin": "\\bin",
+            "\begin": "\\begin",
+            "\big": "\\big",
+            "\bar": "\\bar",
+            "\text": "\\text",
+            "\times": "\\times",
+            "\theta": "\\theta",
+            "\tau": "\\tau",
+            "\tan": "\\tan",
+            "\tag": "\\tag",
+            "\tilde": "\\tilde",
+            "\not": "\\not",
+            "\neq": "\\neq",
+            "\new": "\\new",
+            "\nabla": "\\nabla",
+            "\right": "\\right",
+            "\rho": "\\rho",
+        }
+        for broken, fixed in replacements.items():
+            self.answer = self.answer.replace(broken, fixed)
+        return self
 
 
 # ── File Management ──────────────────────────────────────────────────
