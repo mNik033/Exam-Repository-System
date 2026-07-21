@@ -191,7 +191,12 @@ class PaperExtraction(BaseModel):
         )
     )
     sessionYear: str = Field(
-        description="Academic session string (e.g., '2022-23', '2023-24')."
+        description=(
+            "Academic session string formatted strictly as 'YYYY-YY' (e.g., '2022-23'). "
+            "Normalize formats like '2022-2023' to '2022-23'. "
+            "If only a single year is mentioned (e.g., '2023'), assume it is the starting year "
+            "and output '2023-24'."
+        )
     )
     examType: str = Field(
         description=(
