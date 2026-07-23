@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from google import genai
 from google.genai import types
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 from typing import Callable, Any, Coroutine
 
 from config import settings
@@ -146,6 +146,8 @@ PAPER_EXTRACTION_PROMPT = (
     "Return a JSON output containing the following keys: 'course', 'session', "
     "'sessionYear', 'examType', and 'questions'. For each question, include its "
     "exact text and a specific topic tag. Do not answer the questions in this phase.\n\n"
+    "Extract every sub-part (e.g., 1(a), 1(b), 2(i), 2(ii)) as an individual, separate item in the output. "
+    "Do NOT combine or group sub-parts together into a single question entry.\n\n"
     "Notes: If the paper is unreadable, not a valid exam paper, or any field is "
     "invalid after normalization, return a JSON object where all fields "
     "('course', 'session', 'sessionYear', 'examType', and 'questions') have a value of -1."
@@ -175,10 +177,15 @@ class CourseExtraction(BaseModel):
     name: str = Field(description="Course name, e.g., 'Computer Networks'")
 
 class QuestionExtraction(BaseModel):
+    q_no: str = Field(
+        description=(
+            "The question number or sequence label exactly as written on the paper (e.g., '1', '1(a)', '2.b', '3(ii)')."
+        )
+    )
     question: str = Field(
         description=(
             "The question text, captured exactly as it appears in the exam paper. "
-            "If it is a sub-part, include its main question number in the label (e.g., '1(a) <question>'). "
+            "Do not include the leading question number or prefix label (e.g., '1', '1(a)') in this field. "
             "Strip trailing mark indicators (e.g., '(5 marks)', '[5M]', '(2+3)')."
         )
     )
@@ -189,6 +196,13 @@ class QuestionExtraction(BaseModel):
             "Use Title Case formatting (e.g., 'Binary Search Trees')."
         )
     )
+
+    @field_validator("q_no", mode="before")
+    @classmethod
+    def clean_q_no(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.strip().rstrip(".:- ")
+        return v
 
 class PaperExtraction(BaseModel):
     course: CourseExtraction

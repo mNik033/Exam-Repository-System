@@ -39,7 +39,7 @@ const QuestionCard = React.memo(({ q, index, handleUnlock }) => {
     <div className="card-outlined question-card" id={`q-${q._id}`}>
       <div className="question-card-header">
         <span className="badge badge-primary question-index-badge">
-          Q{index + 1}
+          {q.q_no ? `Q. ${q.q_no}` : `Q${index + 1}`}
         </span>
         {q.tag && (
           <span 

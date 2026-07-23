@@ -10,6 +10,7 @@ from pathlib import Path
 from config import settings
 from database import redis_client
 from models.question import Question
+from models.paper import PaperQuestion
 from repositories import paper_repo, question_repo, user_repo, course_repo, upload_registry_repo
 from services import gemini, storage
 from services.metrics import (
@@ -72,22 +73,23 @@ async def _deduplicate_questions(
     extracted_questions: list,
     embeddings: list[list[float]],
     course_code: str
-) -> tuple[list[str | None], list[dict]]:
+) -> tuple[list[dict | None], list[dict]]:
     # two tier deduplication against existing questions per course
     # tier 1: exact text match (fast indexed DB lookup)
     # tier 2: DB server side exact nearest neighbour search
     
-    question_ids: list[str | None] = []
+    paper_questions: list[dict | None] = []
     new_questions_to_generate: list[dict] = []
     
     for i, q in enumerate(extracted_questions):
         question_text = q.question.strip()
+        q_no = q.q_no
 
         exact_match = await question_repo.find_exact_match(course_id, question_text)
         if exact_match:
-            logger.info("  Q%d: Exact match (id=%s). Reusing.", i + 1, exact_match.id)
+            logger.info("  Q%d (%s): Exact match (id=%s). Reusing.", i + 1, q_no, exact_match.id)
             questions_reused_total.labels(match_type="exact").inc()
-            question_ids.append(exact_match.id)
+            paper_questions.append({"id": exact_match.id, "q_no": q_no})
             continue
 
         match_result = await question_repo.find_nearest_by_embedding(
@@ -99,24 +101,25 @@ async def _deduplicate_questions(
         if match_result:
             best_match, best_sim = match_result
             if best_sim >= SIMILARITY_THRESHOLD:
-                logger.info("  Q%d: Similar to existing question (id=%s, sim=%.3f). Reusing.", i + 1, best_match.id, best_sim)
+                logger.info("  Q%d (%s): Similar to existing question (id=%s, sim=%.3f). Reusing.", i + 1, q_no, best_match.id, best_sim)
                 questions_reused_total.labels(match_type="cosine").inc()
-                question_ids.append(best_match.id)
+                paper_questions.append({"id": best_match.id, "q_no": q_no})
                 continue
         
-        logger.info("  Q%d: No match (best_sim=%.3f). Queuing for answer generation.", i + 1, best_sim)
+        logger.info("  Q%d (%s): No match (best_sim=%.3f). Queuing for answer generation.", i + 1, q_no, best_sim)
 
         new_questions_to_generate.append({
             "index": i,
+            "q_no": q_no,
             "question_text": question_text,
             "tag": q.tag,
             "embedding": embeddings[i]
         })
-        question_ids.append(None)
+        paper_questions.append(None)
 
-    logger.info("Dedup complete: %d reused, %d new.", len(question_ids) - len(new_questions_to_generate), len(new_questions_to_generate))
+    logger.info("Dedup complete: %d reused, %d new.", len(paper_questions) - len(new_questions_to_generate), len(new_questions_to_generate))
 
-    return question_ids, new_questions_to_generate
+    return paper_questions, new_questions_to_generate
 
 async def _move_to_permanent_storage(file_path: str, target_name: str) -> str:
     # move temp upload to permanent storage and return new path
@@ -286,7 +289,7 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
         async with redis_client.lock(lock_key, timeout=240):
             # Step 7: two-tier deduplication
             logger.info("Step 7: Running deduplication (threshold=%.2f)...", SIMILARITY_THRESHOLD)
-            question_ids, new_questions = await _deduplicate_questions(
+            paper_questions, new_questions = await _deduplicate_questions(
                 course_id=course.id,
                 extracted_questions=extracted_data.questions,
                 embeddings=embeddings,
@@ -329,7 +332,7 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
                 questions_created_total.inc(len(questions_to_insert))
 
                 for idx, item in enumerate(new_questions):
-                    question_ids[item["index"]] = inserted_ids[idx]
+                    paper_questions[item["index"]] = {"id": inserted_ids[idx], "q_no": item["q_no"]}
 
         # Step 10: move file and save paper
         suffix = f" {extracted_data.suffix}" if extracted_data.suffix else ""
@@ -338,6 +341,8 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
         paper_title = f"[{course.code}] {course.name} - {extracted_data.examType}{suffix} ({extracted_data.session} {extracted_data.sessionYear})"
 
         all_tags = list({q.tag for q in extracted_data.questions if q.tag})
+
+        questions_list = [PaperQuestion(**q).dict() for q in paper_questions]
 
         paper_id = await paper_repo.create_paper(
             title=paper_title,
@@ -349,7 +354,7 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
             session_year=extracted_data.sessionYear,
             exam_type=extracted_data.examType,
             suffix=extracted_data.suffix,
-            question_ids=question_ids,
+            questions_list=questions_list,
             tags=all_tags,
             processing_model=DEFAULT_ANSWER_MODEL
         )

@@ -157,11 +157,11 @@ async def get_paper_by_hash(file_hash: str) -> Paper | None:
 async def get_question_ids(paper_id: str) -> list[str] | None:
     doc = await papers.find_one(
         {"_id": ObjectId(paper_id)},
-        {"question_ids": 1}
+        {"questions": 1}
     )
     if not doc:
         return None
-    return doc.get("question_ids", [])
+    return [q["id"] for q in doc.get("questions", [])]
 
 async def exists_paper(course_id: str, session: str, session_year: str, exam_type: str, suffix: int | None) -> str | None:
     paper = await papers.find_one({
@@ -216,7 +216,7 @@ async def create_paper(
     session_year: str,
     exam_type: str,
     suffix: int | None,
-    question_ids: list[str],
+    questions_list: list[dict],
     tags: list[str],
     processing_model: int,
 ) -> str:
@@ -230,7 +230,7 @@ async def create_paper(
         "session_year": session_year,
         "exam_type": exam_type,
         "suffix": suffix,
-        "question_ids": question_ids,
+        "questions": questions_list,
         "tags": tags,
         "processing_model": processing_model,
         "created_at": datetime.utcnow()

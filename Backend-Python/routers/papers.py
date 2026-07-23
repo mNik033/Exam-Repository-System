@@ -68,7 +68,7 @@ async def get_papers(
     # if a search query is active, find and attach matching questions
     papers_with_matches = []
     if q and len(q.strip()) >= 3 and papers_list:
-        all_q_ids = [q_id for paper in papers_list for q_id in paper.question_ids]
+        all_q_ids = [pq.id for paper in papers_list for pq in paper.questions]
 
         all_questions = await question_repo.get_questions_by_ids(all_q_ids)
         question_map = {question.id: question for question in all_questions}
@@ -79,8 +79,8 @@ async def get_papers(
             matched_qs = []
             
             if q_lower not in paper.title.lower():
-                for q_id in paper.question_ids:
-                    question = question_map.get(q_id)
+                for pq in paper.questions:
+                    question = question_map.get(pq.id)
                     if not question:
                         continue
                     
@@ -148,7 +148,7 @@ async def get_my_papers(current_user: User = Depends(get_current_user)):
                         session="Pending",
                         session_year="Pending",
                         exam_type="Pending",
-                        question_ids=[],
+                        questions=[],
                         created_at=created_at
                     )
                 )
@@ -268,21 +268,23 @@ async def get_paper_details(paper_id: str, current_user: User = Depends(get_curr
 
     course = await course_repo.get_course_by_id(paper.course_id)
 
-    raw_questions = await question_repo.get_questions_by_ids(paper.question_ids)
+    q_ids = [pq.id for pq in paper.questions]
+    raw_questions = await question_repo.get_questions_by_ids(q_ids)
     question_map = {q.id: q for q in raw_questions}
     unlocked_set = set(current_user.unlocked_answers)
 
     ordered_questions = []
-    for qid in paper.question_ids:
-        q = question_map.get(qid)
+    for pq in paper.questions:
+        q = question_map.get(pq.id)
         if not q:
             continue
 
         ordered_questions.append(
             QuestionPaperResponse(
                 _id=q.id,
+                q_no=pq.q_no,
                 question_text=q.question_text,
-                answer_text=q.answer_text if qid in unlocked_set else None,
+                answer_text=q.answer_text if pq.id in unlocked_set else None,
                 tag=q.tag,
                 course_id=q.course_id,
                 created_at=q.created_at

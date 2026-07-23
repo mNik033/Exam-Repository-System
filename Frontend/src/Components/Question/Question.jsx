@@ -45,6 +45,7 @@ export default function QuestionList() {
               questions: (data.questions || []).map(q => ({
                 ...q,
                 _id: q._id || q.id,
+                q_no: q.q_no,
                 question: q.question_text || q.question,
                 answer: q.answer_text || q.answer,
               })),
@@ -84,6 +85,7 @@ export default function QuestionList() {
           questions: (data.questions || []).map(q => ({
             ...q,
             _id: q._id || q.id,
+            q_no: q.q_no,
             question: q.question_text || q.question,
             answer: q.answer_text || q.answer,
           })),
@@ -322,7 +324,7 @@ export default function QuestionList() {
                       style={{ padding: 20, listStyle: "none" }}
                     >
                       <h4 className="serif-heading" style={{ fontSize: "1.0625rem", color: "var(--md-primary)", marginTop: 0, marginBottom: 12, fontWeight: 500, lineHeight: 1.4 }}>
-                        Q{index + 1}: {qa.question}
+                        {qa.q_no ? `Q. ${qa.q_no}` : `Q${index + 1}`}: {qa.question}
                       </h4>
                       <hr style={{ border: "none", borderTop: "1px solid var(--md-outline-variant)", marginBottom: 16 }} />
 

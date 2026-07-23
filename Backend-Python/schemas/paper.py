@@ -6,6 +6,7 @@ from models.course import Course
 
 class QuestionPaperResponse(BaseModel):
     id: str = Field(default=None, alias="_id")
+    q_no: str
     question_text: str
     answer_text: str | None = None
     tag: str

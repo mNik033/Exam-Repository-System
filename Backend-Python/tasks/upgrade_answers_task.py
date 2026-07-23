@@ -36,7 +36,8 @@ async def run_upgrade_batch():
         client = api_context.client
         limiter = api_context.rate_limiter
 
-        questions = await question_repo.get_questions_by_ids(paper.question_ids)
+        q_ids = [q.id for q in paper.questions]
+        questions = await question_repo.get_questions_by_ids(q_ids)
         pending_questions = [q for q in questions if q.answer_model < TARGET_MODEL]
         
         if not pending_questions:
