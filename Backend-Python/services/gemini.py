@@ -127,11 +127,11 @@ class GeminiModelConfig:
 
 ANSWER_MODELS = {
     1: GeminiModelConfig(
-        name="gemini-3.1-flash-lite",
+        name="gemini-3.5-flash-lite",
         pool=ApiKeyPool(api_keys=settings.gemini_api_key_list, rpm_per_key=15)
     ),
     2: GeminiModelConfig(
-        name="gemini-3.5-flash",
+        name="gemini-3.6-flash",
         pool=ApiKeyPool(api_keys=settings.gemini_api_key_list, rpm_per_key=5)
     )
 }
@@ -344,7 +344,6 @@ async def extract_paper_data(
     config = types.GenerateContentConfig(
         response_mime_type="application/json",
         response_schema=PaperExtraction,
-        temperature=0.2,
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
     )
     if cache_name:
@@ -479,7 +478,7 @@ async def generate_single_answer(
     config = types.GenerateContentConfig(
         response_mime_type="application/json",
         response_schema=AnswerExtraction,
-        temperature=0.2,
+        thinking_config=types.ThinkingConfig(thinking_level="high"),
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
     )
 
