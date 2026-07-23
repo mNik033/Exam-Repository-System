@@ -155,6 +155,9 @@ ANSWER_GENERATION_PROMPT = (
     "Given the provided exam paper image and the specific question text, generate "
     "an exceptionally detailed and comprehensive pedagogical answer for this exact "
     "question. Analysis must focus heavily on clarity, structure, and correctness.\n\n"
+    "- Use step-by-step reasoning for derivations or numerical problems.\n"
+    "- Describe diagrams or visual aids in text if they would help explain the concept.\n"
+    "- Explicitly cite relevant theorems or formulas by name before applying them.\n\n"
     "Specific Question: {ques_text}"
 )
 
@@ -182,7 +185,8 @@ class QuestionExtraction(BaseModel):
     tag: str = Field(
         description=(
             "A single, specific tag that accurately identifies the core concept, "
-            "technique, model, algorithm, or sub-topic tested by the question."
+            "technique, model, algorithm, or sub-topic tested by the question. "
+            "Use Title Case formatting (e.g., 'Binary Search Trees')."
         )
     )
 
@@ -231,10 +235,11 @@ class AnswerExtraction(BaseModel):
     answer: str = Field(
         description=(
             "Generate an exceptionally detailed and comprehensive answer, suitable for "
-            "a student aiming for deep understanding. Use markdown formatting: bullet "
-            "points, numbered lists, and logical headings/subheadings (### Heading) "
-            "to structure the answer. CRITICAL: For math formulas, you MUST strictly "
-            "use $ for inline math (e.g. $x^2$) and $$ for block math. Do NOT use \\( or \\[."
+            "a student aiming for deep understanding. Start with a concise one-liner summary. "
+            "Use markdown formatting: bold key terms on first mention, use bullet "
+            "points/numbered lists, and use logical headings (### Heading) to separate sections. "
+            "CRITICAL: For math formulas, you MUST strictly use $ for inline math (e.g. $x^2$) "
+            "and $$ for block math. Do NOT use \\( or \\[."
         )
     )
 
