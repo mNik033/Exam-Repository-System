@@ -75,6 +75,7 @@ class ApiContext:
     api_key: str
     client: genai.Client
     rate_limiter: SlidingWindowRateLimiter
+    last_assigned: float = 0.0
 
 class ApiKeyPool:
     def __init__(self, api_keys: list[str], rpm_per_key: int = 15):
@@ -95,14 +96,19 @@ class ApiKeyPool:
 
     def acquire(self) -> ApiContext:
         def _last_used(entry: ApiContext) -> float:
-            if not entry.rate_limiter.timestamps:
-                return 0.0
-            return entry.rate_limiter.timestamps[-1]
+            ts = entry.rate_limiter.timestamps
+            last_used = ts[-1] if ts else 0.0
+            return max(last_used, entry.last_assigned)
         
         best = min(self.contexts, key=_last_used)
+        ts = best.rate_limiter.timestamps
         # the "most rested" key is in the future -> all keys exhausted
-        if best.rate_limiter.timestamps and best.rate_limiter.timestamps[-1] > time.monotonic():
+        if ts and ts[-1] > time.monotonic():
             raise AllKeysExhaustedError("All API keys are currently exhausted")
+        
+        # mark it as assigned immediately to break ties
+        # before an actual API call is recorded
+        best.last_assigned = time.monotonic()
         return best
     
     def mark_exhausted(self, ctx: ApiContext):
