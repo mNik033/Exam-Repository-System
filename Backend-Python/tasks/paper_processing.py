@@ -24,7 +24,13 @@ logger = logging.getLogger(__name__)
 SIMILARITY_THRESHOLD = 0.87
 DEFAULT_ANSWER_MODEL = 1
 DEFAULT_EMBEDDING_MODEL = 1
+_processing_semaphore: asyncio.Semaphore | None = None
 
+def get_processing_semaphore() -> asyncio.Semaphore:
+    global _processing_semaphore
+    if _processing_semaphore is None:
+        _processing_semaphore = asyncio.Semaphore(len(settings.gemini_api_key_list))
+    return _processing_semaphore
 
 # ── Helper Functions ──────────────────────────────────────────────────
 
@@ -391,48 +397,52 @@ async def _run_paper_pipeline(file_path: str, file_hash: str, user_id: str, api_
 
 async def process_uploaded_paper_task(file_path: str, user_id: str) -> None:
     logger.info(f"Background task triggered for {file_path} uploaded by user {user_id}")
-    local_filename = Path(file_path).name
-    file_hash = local_filename.split("_")[2]
 
-    lock_key = f"{settings.REDIS_PREFIX}:lock:process_paper:{file_hash}"
-    lock_acquired = await redis_client.set(lock_key, "locked", nx=True, ex=300)
-    if not lock_acquired:
-        logger.info(f"File {file_hash} already being processed.")
-        return
+    async with get_processing_semaphore():
+        local_filename = Path(file_path).name
+        file_hash = local_filename.split("_")[2]
 
-    start_time = time.time()
-    for _ in range(len(gemini.ANSWER_MODELS[DEFAULT_ANSWER_MODEL].pool.contexts)):
+        lock_key = f"{settings.REDIS_PREFIX}:lock:process_paper:{file_hash}"
+        lock_acquired = await redis_client.set(lock_key, "locked", nx=True, ex=300)
+        if not lock_acquired:
+            logger.info(f"File {file_hash} already being processed.")
+            return
+
+        active_paper_processing_tasks.inc()
         try:
-            api_context = gemini.ANSWER_MODELS[DEFAULT_ANSWER_MODEL].pool.acquire()
-        except gemini.AllKeysExhaustedError:
-            break
-            
-        try:
-            active_paper_processing_tasks.inc()
-            await asyncio.wait_for(
-                _run_paper_pipeline(file_path, file_hash, user_id, api_context), timeout=240
-            )
-            paper_processing_duration.observe(time.time()-start_time)
-            paper_processing_total.labels(status="success", failure_reason="").inc()
-            return
-        except asyncio.TimeoutError:
-            logger.error(f"Paper processing timed out after 4 minutes for: {file_path}")
-            paper_processing_total.labels(status="failed", failure_reason="timeout").inc()
-            await _notify_and_fail_paper(
-                file_hash, user_id, file_path, "Paper processing timed out. Please try again."
-            )
-            return
-        except gemini.DailyQuotaExhaustedError:
-            gemini.ANSWER_MODELS[DEFAULT_ANSWER_MODEL].pool.mark_exhausted(api_context)
-            continue
-        except Exception:
-            paper_processing_total.labels(status="failed", failure_reason="unknown_error").inc()
-            await _notify_and_fail_paper(file_hash, user_id, file_path, "An error occurred while processing your paper. Please try again later.")
-            return
+            start_time = time.time()
+            for _ in range(len(gemini.ANSWER_MODELS[DEFAULT_ANSWER_MODEL].pool.contexts)):
+                try:
+                    api_context = gemini.ANSWER_MODELS[DEFAULT_ANSWER_MODEL].pool.acquire()
+                except gemini.AllKeysExhaustedError:
+                    break
+                
+                try:
+                    await asyncio.wait_for(
+                        _run_paper_pipeline(file_path, file_hash, user_id, api_context), timeout=240
+                    )
+                    paper_processing_duration.observe(time.time()-start_time)
+                    paper_processing_total.labels(status="success", failure_reason="").inc()
+                    return
+                except asyncio.TimeoutError:
+                    logger.error(f"Paper processing timed out after 4 minutes for: {file_path}")
+                    paper_processing_total.labels(status="failed", failure_reason="timeout").inc()
+                    await _notify_and_fail_paper(
+                        file_hash, user_id, file_path, "Paper processing timed out. Please try again."
+                    )
+                    return
+                except gemini.DailyQuotaExhaustedError:
+                    gemini.ANSWER_MODELS[DEFAULT_ANSWER_MODEL].pool.mark_exhausted(api_context)
+                    continue
+                except Exception:
+                    paper_processing_total.labels(status="failed", failure_reason="unknown_error").inc()
+                    await _notify_and_fail_paper(file_hash, user_id, file_path, "An error occurred while processing your paper. Please try again later.")
+                    return
+
+            logger.error("Paper processing failed: All keys exhausted")
+            paper_processing_total.labels(status="failed", failure_reason="all_keys_exhausted").inc()
+            await _notify_and_fail_paper(file_hash, user_id, file_path, "Our daily processing capacity has been reached. Please re-upload your paper tomorrow.")
+
         finally:
             active_paper_processing_tasks.dec()
             await redis_client.delete(lock_key)
-
-    logger.error("Paper processing failed: All keys exhausted")
-    paper_processing_total.labels(status="failed", failure_reason="all_keys_exhausted").inc()
-    await _notify_and_fail_paper(file_hash, user_id, file_path, "Our daily processing capacity has been reached. Please re-upload your paper tomorrow.")
